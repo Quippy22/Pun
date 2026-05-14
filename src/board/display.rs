@@ -1,9 +1,9 @@
 use crate::board::Board;
-
 use std::fmt;
 
-impl fmt::Debug for Board {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Board {
+    /// Prints every bitboard with its piece label for data verification
+    pub fn print_data(&self) {
         let piece_labels = [
             "WhitePawn",
             "WhiteKnight",
@@ -19,37 +19,76 @@ impl fmt::Debug for Board {
             "BlackKing",
         ];
 
-        // Helper to create the grid with a label
-        let to_labeled_map = |n: u64, label: &str| {
-            let mut map = format!("\n--- {} ---\n", label);
-            for rank in (0..8).rev() {
-                for file in 0..8 {
-                    let square = rank * 8 + file;
-                    let bit = (n >> square) & 1;
-                    map.push_str(if bit == 1 { "1 " } else { "0 " });
-                }
-                map.push('\n');
-            }
-            map
-        };
+        println!("Board Data:");
+        println!("=================");
 
-        // Combine all pieces into one large formatted block
-        let mut pieces_output = String::from("");
         for i in 0..12 {
-            pieces_output.push_str(&to_labeled_map(self.pieces[i], piece_labels[i]));
+            println!("\n--- {} (Index {}) ---", piece_labels[i], i);
+            self.print_bitboard_map(self.pieces[i]);
         }
 
-        // Combine colors
-        let mut colors_output = String::from("");
-        colors_output.push_str(&to_labeled_map(self.colors[0], "White Mask"));
-        colors_output.push_str(&to_labeled_map(self.colors[1], "Black Mask"));
+        println!("\n--- Occupancy Masks ---");
+        println!("White Mask:");
+        self.print_bitboard_map(self.colors[0]);
+        println!("Black Mask:");
+        self.print_bitboard_map(self.colors[1]);
 
-        f.debug_struct("Board")
-            .field("pieces", &format_args!("{}", pieces_output))
-            .field("colors", &format_args!("{}", colors_output))
-            .field("side_to_move", &self.side_to_move)
-            .field("castling", &self.castling_rights)
-            .field("en_passant", &self.en_passant_sq)
-            .finish()
+        println!("\nMetadata:");
+        println!("Side to move:    {:?}", self.side_to_move);
+        println!("Castling Rights: {:b}", self.castling_rights);
+        println!("En Passant:      {:?}", self.en_passant_sq);
+    }
+
+    // Private helper to keep the bitboard printing logic in one place
+    fn print_bitboard_map(&self, bb: u64) {
+        for rank in (0..8).rev() {
+            print!("{} ", rank + 1);
+            for file in 0..8 {
+                let square = rank * 8 + file;
+                let bit = (bb >> square) & 1;
+                print!("{} ", if bit == 1 { "1" } else { "0" });
+            }
+            println!();
+        }
+        println!("  a b c d e f g h");
+    }
+}
+
+// Keep your standard Display impl here too
+impl fmt::Display for Board {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "  +-----------------+")?;
+        for rank in (0..8).rev() {
+            write!(f, "{} | ", rank + 1)?;
+            for file in 0..8 {
+                let square = rank * 8 + file;
+                let mut piece_char = '.';
+                for (i, bb) in self.pieces.iter().enumerate() {
+                    if (bb >> square) & 1 == 1 {
+                        piece_char = match i {
+                            0 => 'P',
+                            1 => 'N',
+                            2 => 'B',
+                            3 => 'R',
+                            4 => 'Q',
+                            5 => 'K',
+                            6 => 'p',
+                            7 => 'n',
+                            8 => 'b',
+                            9 => 'r',
+                            10 => 'q',
+                            11 => 'k',
+                            _ => '.',
+                        };
+                        break;
+                    }
+                }
+                write!(f, "{} ", piece_char)?;
+            }
+            writeln!(f, "|")?;
+        }
+        writeln!(f, "  +-----------------+")?;
+        writeln!(f, "    a b c d e f g h")?;
+        Ok(())
     }
 }
