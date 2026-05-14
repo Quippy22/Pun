@@ -1,4 +1,5 @@
 mod fen;
+mod display;
 
 use crate::board::fen::FenData;
 
@@ -26,7 +27,6 @@ pub enum Color {
 }
 
 /// The board struct
-#[derive(Debug)]
 pub struct Board {
     /// The bitboards
     pub pieces: [u64; 12],
