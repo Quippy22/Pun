@@ -1,5 +1,6 @@
 mod display;
 mod fen;
+mod moves;
 
 use crate::board::fen::FenData;
 
@@ -65,7 +66,7 @@ impl Board {
         }
     }
 
-    fn get_color_bitboard(pieces: &[u64; 12], color: Color) -> u64 {
+    pub fn get_color_bitboard(pieces: &[u64; 12], color: Color) -> u64 {
         let mut bitboard = 0u64;
         let range = match color {
             Color::White => 0..6,
@@ -74,6 +75,19 @@ impl Board {
 
         for i in range {
             bitboard |= pieces[i];
+        }
+
+        bitboard
+    }
+
+    pub fn get_side_bitboard(&self, color: &Color) -> u64 {
+        let mut bitboard = 0u64;
+        let range = match color {
+            Color::White => 0..6,
+            Color::Black => 6..12,
+        };
+        for i in range {
+            bitboard |= self.pieces[i];
         }
 
         bitboard
