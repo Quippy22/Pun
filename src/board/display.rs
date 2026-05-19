@@ -1,4 +1,6 @@
 use crate::board::Board;
+use crate::board::moves::Move;
+
 use std::fmt;
 
 impl Board {
@@ -90,5 +92,16 @@ impl fmt::Display for Board {
         writeln!(f, "  +-----------------+")?;
         writeln!(f, "    a b c d e f g h")?;
         Ok(())
+    }
+}
+
+impl fmt::Display for Move {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let start_file = (b'a' + (self.start_pos() % 8) as u8) as char;
+        let start_rank = (b'1' + (self.start_pos() / 8) as u8) as char;
+        let end_file = (b'a' + (self.end_pos() % 8) as u8) as char;
+        let end_rank = (b'1' + (self.end_pos() / 8) as u8) as char;
+
+        write!(f, "{}{}{}{}", start_file, start_rank, end_file, end_rank)
     }
 }
