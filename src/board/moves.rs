@@ -3,7 +3,7 @@ use crate::board::{Board, Color, Piece};
 /// Special promotion flags
 const PROMOTIONS: [u16; 4] = [0b1000, 0b1010, 0b1100, 0b1110];
 /// The 8 possible knight moves as bit shifts
-const KNITE_MOVES: [i8; 8] = [17, 15, 10, 6, -17, -15, -10, -6];
+const KNIGHT_MOVES: [i8; 8] = [17, 15, 10, 6, -17, -15, -10, -6];
 
 /// Wrapper around u16
 /// holds the starting position
@@ -131,17 +131,21 @@ impl MoveGenerator {
 
     fn get_all_pawn_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
         let (mut pieces, color) = Self::get_bitboard(board, piece);
+        let (own_pieces, enemy_pieces) = Self::get_sides(board, &color);
+        let mut index: u16;
+        let mut pawn: u64;
+        let mut is_promotion: bool;
 
         while pieces != 0 {
-            // get the index of the first piece
-            let index: u16 = pieces.trailing_zeros() as u16;
-            let pawn: u64 = 1 << index;
-            let is_promotion: bool = index / 8 == 6;
+            index = pieces.trailing_zeros() as u16;
+            pawn = 1 << index;
+            is_promotion = index / 8 == 6;
+
+            let mut flag = 0b0000;
 
             // -- Forward Moves --
-            // also swap the board bytes
-            if pawn << 8 & board.get_side_bitboard(&color).swap_bytes() == 0 {
-                let flag = 0b0000;
+            // check for pieces in front of the pawn
+            if pawn << 8 & (own_pieces | enemy_pieces) == 0 {
                 // if the pawn is on the 7th rank
                 // add the promotion flag
                 if is_promotion {
@@ -162,8 +166,7 @@ impl MoveGenerator {
 
                 // if the pawn is on the 2nd rank
                 // add the 2 square move
-                if index / 8 == 1 && pawn << 16 & board.get_side_bitboard(&color).swap_bytes() == 0
-                {
+                if index / 8 == 1 && pawn << 16 & (own_pieces | enemy_pieces) == 0 {
                     available_moves.push(match color {
                         Color::White => Move(index | (index + 16) << 6 | flag << 12),
                         Color::Black => Move((index ^ 56) | ((index ^ 56) - 16) << 6 | flag << 12),
@@ -173,13 +176,8 @@ impl MoveGenerator {
 
             // -- Captures --
             // get all the enemy pieces
-            let enemy_pieces = match color {
-                Color::White => board.get_side_bitboard(&Color::Black),
-                Color::Black => board.get_side_bitboard(&Color::White).swap_bytes(),
-            };
-
             // set the flag to capture
-            let flag = 0b0001;
+            flag |= 0b0001;
 
             let file = index % 8;
 
@@ -247,7 +245,7 @@ impl MoveGenerator {
             knight = 1 << index;
 
             // check all the possible moves
-            for m in KNITE_MOVES.iter() {
+            for m in KNIGHT_MOVES.iter() {
                 let (moved_knight, target_index) = if m.is_negative() {
                     (knight >> m.abs() as u16, index.wrapping_sub(m.abs() as u16))
                 } else {
