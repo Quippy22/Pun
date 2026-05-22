@@ -4,6 +4,8 @@ use crate::board::{Board, Color, Piece};
 const PROMOTIONS: [u16; 4] = [0b1000, 0b1010, 0b1100, 0b1110];
 /// The 8 possible knight moves as bit shifts
 const KNIGHT_MOVES: [i8; 8] = [17, 15, 10, 6, -17, -15, -10, -6];
+/// The 8 possible king moves as bit shifts
+const KING_MOVES: [i8; 8] = [-9, -8, -7, -1, 1, 7, 8, 9];
 
 /// Wrapper around u16
 /// holds the starting position
@@ -275,8 +277,43 @@ impl MoveGenerator {
         }
     }
 
+    fn get_all_king_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
+        let (pieces, color) = Self::get_bitboard(board, piece);
+        let (own_pieces, enemy_pieces) = Self::get_sides(board, &color);
+        let index: u16 = pieces.trailing_zeros() as u16;
+        let king: u64 = 1 << index;
+
+        // check all the possible moves
+        for m in KING_MOVES.iter() {
+            let (moved_king, target_index) = if m.is_negative() {
+                (king >> m.abs() as u16, index.wrapping_sub(m.abs() as u16))
+            } else {
+                (king << m.abs() as u16, index.wrapping_add(m.abs() as u16))
+            };
+            // check if the move is valid
+            if moved_king == 0
+                || ((target_index % 8) as i16 - (index % 8) as i16).abs() > 1
+                || (moved_king & own_pieces) != 0
+            {
+                continue;
+            }
+
+            // check for capture
+            let flag = if moved_king & enemy_pieces != 0 {
+                0b0001
+            } else {
+                0b0000
+            };
+            available_moves.push(match color {
+                Color::White => Move(index | target_index << 6 | flag << 12),
+                Color::Black => Move((index ^ 56) | (target_index ^ 56) << 6 | flag << 12),
+            });
+        }
+
+        // TODO: check for castling
+    }
+
     fn get_all_bishop_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {}
     fn get_all_rook_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {}
     fn get_all_queen_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {}
-    fn get_all_king_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {}
 }
