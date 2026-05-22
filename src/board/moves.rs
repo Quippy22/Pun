@@ -2,6 +2,8 @@ use crate::board::{Board, Color, Piece};
 
 /// Special promotion flags
 const PROMOTIONS: [u16; 4] = [0b1000, 0b1010, 0b1100, 0b1110];
+/// The 8 possible knight moves as bit shifts
+const KNITE_MOVES: [i8; 8] = [17, 15, 10, 6, -17, -15, -10, -6];
 
 /// Wrapper around u16
 /// holds the starting position
@@ -65,8 +67,8 @@ impl Move {
 pub struct MoveGenerator;
 
 impl MoveGenerator {
-    /// the main entry point of the move generator
-    /// returns a vector of all possible moves for a given piece
+    /// The main entry point of the move generator.
+    /// Returns a vector of all possible moves for a given piece
     pub fn get_possible_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
         match piece {
             Piece::WhitePawn | Piece::BlackPawn => {
@@ -89,12 +91,46 @@ impl MoveGenerator {
             }
         }
     }
-    fn get_all_pawn_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
-        let (mut pieces, color) = match piece {
+
+    /// Returns the bitboard and the color of the piece.
+    /// Automatically rotates the bitboard for the black pieces
+    fn get_bitboard(board: &Board, piece: Piece) -> (u64, Color) {
+        let (pieces, color) = match piece {
             Piece::WhitePawn => (board.pieces[piece as usize], Color::White),
             Piece::BlackPawn => (board.pieces[piece as usize].swap_bytes(), Color::Black),
-            _ => panic!("Invalid pawn"),
+            Piece::WhiteKnight => (board.pieces[piece as usize], Color::White),
+            Piece::BlackKnight => (board.pieces[piece as usize].swap_bytes(), Color::Black),
+            Piece::WhiteBishop => (board.pieces[piece as usize], Color::White),
+            Piece::BlackBishop => (board.pieces[piece as usize].swap_bytes(), Color::Black),
+            Piece::WhiteRook => (board.pieces[piece as usize], Color::White),
+            Piece::BlackRook => (board.pieces[piece as usize].swap_bytes(), Color::Black),
+            Piece::WhiteQueen => (board.pieces[piece as usize], Color::White),
+            Piece::BlackQueen => (board.pieces[piece as usize].swap_bytes(), Color::Black),
+            Piece::WhiteKing => (board.pieces[piece as usize], Color::White),
+            Piece::BlackKing => (board.pieces[piece as usize].swap_bytes(), Color::Black),
         };
+        (pieces, color)
+    }
+
+    /// Returns the bitboards for the own and enemy pieces
+    /// Automatically rotates the bitboards for the black pieces
+    fn get_sides(board: &Board, color: &Color) -> (u64, u64) {
+        let (own_bitboard, enemy_bitboard) = match color {
+            Color::White => (
+                board.get_side_bitboard(&Color::White),
+                board.get_side_bitboard(&Color::Black),
+            ),
+            Color::Black => (
+                board.get_side_bitboard(&Color::Black).swap_bytes(),
+                board.get_side_bitboard(&Color::White).swap_bytes(),
+            ),
+        };
+
+        (own_bitboard, enemy_bitboard)
+    }
+
+    fn get_all_pawn_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
+        let (mut pieces, color) = Self::get_bitboard(board, piece);
 
         while pieces != 0 {
             // get the index of the first piece
@@ -199,7 +235,48 @@ impl MoveGenerator {
             pieces &= pieces - 1;
         }
     }
-    fn get_all_knight_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {}
+
+    fn get_all_knight_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
+        let (mut pieces, color) = Self::get_bitboard(board, piece);
+        let mut index: u16;
+        let mut knight: u64;
+        let (own_pieces, enemy_pieces) = Self::get_sides(board, &color);
+
+        while pieces != 0 {
+            index = pieces.trailing_zeros() as u16;
+            knight = 1 << index;
+
+            // check all the possible moves
+            for m in KNITE_MOVES.iter() {
+                let (moved_knight, target_index) = if m.is_negative() {
+                    (knight >> m.abs() as u16, index.wrapping_sub(m.abs() as u16))
+                } else {
+                    (knight << m.abs() as u16, index.wrapping_add(m.abs() as u16))
+                };
+                // check if the move is valid
+                if moved_knight == 0
+                    || ((target_index % 8) as i16 - (index % 8) as i16).abs() > 2
+                    || (moved_knight & own_pieces) != 0
+                {
+                    continue;
+                }
+
+                // check for capture
+                let flag = if moved_knight & enemy_pieces != 0 {
+                    0b0001
+                } else {
+                    0b0000
+                };
+                available_moves.push(match color {
+                    Color::White => Move(index | target_index << 6 | flag << 12),
+                    Color::Black => Move((index ^ 56) | (target_index ^ 56) << 6 | flag << 12),
+                });
+            }
+
+            pieces &= pieces - 1;
+        }
+    }
+
     fn get_all_bishop_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {}
     fn get_all_rook_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {}
     fn get_all_queen_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {}
