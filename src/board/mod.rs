@@ -21,7 +21,7 @@ enum Piece {
 }
 
 /// Used to acces the bitboards by color
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum Color {
     White,
     Black,
@@ -80,7 +80,7 @@ impl Board {
         bitboard
     }
 
-    pub fn get_side_bitboard(&self, color: &Color) -> u64 {
+    pub fn get_side_bitboard(&self, color: Color) -> u64 {
         let mut bitboard = 0u64;
         let range = match color {
             Color::White => 0..6,

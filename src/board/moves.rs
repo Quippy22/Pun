@@ -120,15 +120,15 @@ impl MoveGenerator {
 
     /// Returns the bitboards for the own and enemy pieces
     /// Automatically rotates the bitboards for the black pieces
-    fn get_sides(board: &Board, color: &Color) -> (u64, u64) {
+    fn get_sides(board: &Board, color: Color) -> (u64, u64) {
         let (own_bitboard, enemy_bitboard) = match color {
             Color::White => (
-                board.get_side_bitboard(&Color::White),
-                board.get_side_bitboard(&Color::Black),
+                board.get_side_bitboard(Color::White),
+                board.get_side_bitboard(Color::Black),
             ),
             Color::Black => (
-                board.get_side_bitboard(&Color::Black).swap_bytes(),
-                board.get_side_bitboard(&Color::White).swap_bytes(),
+                board.get_side_bitboard(Color::Black).swap_bytes(),
+                board.get_side_bitboard(Color::White).swap_bytes(),
             ),
         };
 
@@ -137,7 +137,7 @@ impl MoveGenerator {
 
     fn get_all_pawn_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
         let (mut pieces, color) = Self::get_bitboard(board, piece);
-        let (own_pieces, enemy_pieces) = Self::get_sides(board, &color);
+        let (own_pieces, enemy_pieces) = Self::get_sides(board, color);
         let mut index: u16;
         let mut pawn: u64;
         let mut is_promotion: bool;
@@ -244,7 +244,7 @@ impl MoveGenerator {
         let (mut pieces, color) = Self::get_bitboard(board, piece);
         let mut index: u16;
         let mut knight: u64;
-        let (own_pieces, enemy_pieces) = Self::get_sides(board, &color);
+        let (own_pieces, enemy_pieces) = Self::get_sides(board, color);
 
         while pieces != 0 {
             index = pieces.trailing_zeros() as u16;
@@ -283,7 +283,7 @@ impl MoveGenerator {
 
     fn get_all_king_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
         let (pieces, color) = Self::get_bitboard(board, piece);
-        let (own_pieces, enemy_pieces) = Self::get_sides(board, &color);
+        let (own_pieces, enemy_pieces) = Self::get_sides(board, color);
         let index: u16 = pieces.trailing_zeros() as u16;
         let king: u64 = 1 << index;
 
@@ -324,7 +324,7 @@ impl MoveGenerator {
         directions: &[i16],
         own_pieces: u64,
         enemy_pieces: u64,
-        color: &Color,
+        color: Color,
         is_diagonal: bool,
         available_moves: &mut Vec<Move>,
     ) {
@@ -406,7 +406,7 @@ impl MoveGenerator {
 
     fn get_all_bishop_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
         let (mut pieces, color) = Self::get_bitboard(board, piece);
-        let (own_pieces, enemy_pieces) = Self::get_sides(board, &color);
+        let (own_pieces, enemy_pieces) = Self::get_sides(board, color);
         let mut index: u16;
 
         while pieces != 0 {
@@ -416,7 +416,7 @@ impl MoveGenerator {
                 &BISHOP_DIRECTIONS,
                 own_pieces,
                 enemy_pieces,
-                &color,
+                color,
                 true,
                 available_moves,
             );
@@ -427,7 +427,7 @@ impl MoveGenerator {
 
     fn get_all_rook_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
         let (mut pieces, color) = Self::get_bitboard(board, piece);
-        let (own_pieces, enemy_pieces) = Self::get_sides(board, &color);
+        let (own_pieces, enemy_pieces) = Self::get_sides(board, color);
         let mut index: u16;
 
         while pieces != 0 {
@@ -437,7 +437,7 @@ impl MoveGenerator {
                 &ROOK_DIRECTIONS,
                 own_pieces,
                 enemy_pieces,
-                &color,
+                color,
                 false,
                 available_moves,
             );
@@ -448,7 +448,7 @@ impl MoveGenerator {
 
     fn get_all_queen_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
         let (mut pieces, color) = Self::get_bitboard(board, piece);
-        let (own_pieces, enemy_pieces) = Self::get_sides(board, &color);
+        let (own_pieces, enemy_pieces) = Self::get_sides(board, color);
         let mut index: u16;
 
         while pieces != 0 {
@@ -458,7 +458,7 @@ impl MoveGenerator {
                 &BISHOP_DIRECTIONS,
                 own_pieces,
                 enemy_pieces,
-                &color,
+                color,
                 true,
                 available_moves,
             );
@@ -467,7 +467,7 @@ impl MoveGenerator {
                 &ROOK_DIRECTIONS,
                 own_pieces,
                 enemy_pieces,
-                &color,
+                color,
                 false,
                 available_moves,
             );
