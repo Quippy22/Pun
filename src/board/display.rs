@@ -95,13 +95,68 @@ impl fmt::Display for Board {
     }
 }
 
+/// Formats a chess move into an explicit, human-readable debugging format.
+///
+/// Evaluates the unique move types using internal flag patterns:
+/// - Castles: `O-O` (Kingside `0b0100`) or `O-O-O` (Queenside `0b0110`).
+/// - En Passant: Appends an `x` and ` e.p.` suffix (e.g., `e5xd6 e.p.`).
+/// - Captures: Injects an `x` between squares (e.g., `e2xe4`).
+/// - Promotions: Appends the specific piece character (`q`, `r`, `b`, `n`).
+///
+/// # Explicit Flag Map:
+/// - `0b0000` -> Normal Move
+/// - `0b0001` -> Capture
+/// - `0b0011` -> En Passant
+/// - `0b0100` -> Kingside Castle
+/// - `0b0110` -> Queenside Castle
+/// - `0b1000` -> Queen Promotion
+/// - `0b1010` -> Rook Promotion
+/// - `0b1100` -> Bishop Promotion
+/// - `0b1110` -> Knight Promotion
 impl fmt::Display for Move {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let start_file = (b'a' + (self.start_pos() % 8) as u8) as char;
-        let start_rank = (b'1' + (self.start_pos() / 8) as u8) as char;
-        let end_file = (b'a' + (self.end_pos() % 8) as u8) as char;
-        let end_rank = (b'1' + (self.end_pos() / 8) as u8) as char;
+        // 1. Evaluate Castles first using your exact flags
+        match self.special_flag() {
+            0b0100 => return write!(f, "O-O"),
+            0b0110 => return write!(f, "O-O-O"),
+            _ => {} // Not a castle, proceed to standard coordinates
+        }
 
-        write!(f, "{}{}{}{}", start_file, start_rank, end_file, end_rank)
+        let start = self.start_pos();
+        let end = self.end_pos();
+
+        let start_file = (b'a' + (start % 8) as u8) as char;
+        let start_rank = (b'1' + (start / 8) as u8) as char;
+        let end_file = (b'a' + (end % 8) as u8) as char;
+        let end_rank = (b'1' + (end / 8) as u8) as char;
+
+        // 2. Check for captures (Normal Capture OR En Passant)
+        let is_hit = self.is_capture() || self.is_en_passant();
+        let separator = if is_hit { "x" } else { "" };
+
+        // Print core path (e.g., "e2e4" or "e2xe4")
+        write!(
+            f,
+            "{}{}{}{}{}",
+            start_file, start_rank, separator, end_file, end_rank
+        )?;
+
+        // 3. Handle En Passant markers
+        if self.is_en_passant() {
+            write!(f, " e.p.")?;
+        }
+
+        // 4. Handle all explicit promotion options cleanly
+        if self.is_promotion() {
+            match self.special_flag() {
+                0b1000 => write!(f, "q")?,
+                0b1010 => write!(f, "r")?,
+                0b1100 => write!(f, "b")?,
+                0b1110 => write!(f, "n")?,
+                _ => {}
+            }
+        }
+
+        Ok(())
     }
 }
