@@ -94,7 +94,7 @@ impl FenData {
                         'K' => Piece::BlackKing,
                         _ => panic!("Invalid piece"),
                     };
-                    bitboard[piece as usize] |= 1u64 << rank * 8 + file;
+                    bitboard[piece as usize] |= 1u64 << (rank * 8 + file);
 
                     file += 1;
                 }

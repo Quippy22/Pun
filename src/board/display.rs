@@ -24,8 +24,8 @@ impl Board {
         println!("Board Data:");
         println!("=================");
 
-        for i in 0..12 {
-            println!("\n--- {} (Index {}) ---", piece_labels[i], i);
+        for (i, piece) in piece_labels.iter().enumerate() {
+            println!("\n--- {} (Index {}) ---", piece, i);
             self.print_bitboard_map(self.pieces[i]);
         }
 

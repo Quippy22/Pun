@@ -3,9 +3,9 @@ use crate::board::{Board, Color, Piece};
 /// Special promotion flags
 const PROMOTIONS: [u16; 4] = [0b1000, 0b1010, 0b1100, 0b1110];
 /// The 8 possible knight moves as bit shifts
-const KNIGHT_MOVES: [i8; 8] = [17, 15, 10, 6, -17, -15, -10, -6];
+const KNIGHT_MOVES: [i16; 8] = [17, 15, 10, 6, -17, -15, -10, -6];
 /// The 8 possible king moves as bit shifts
-const KING_MOVES: [i8; 8] = [-9, -8, -7, -1, 1, 7, 8, 9];
+const KING_MOVES: [i16; 8] = [-9, -8, -7, -1, 1, 7, 8, 9];
 /// The 4 possible bishop directions
 const BISHOP_DIRECTIONS: [i16; 4] = [-9, -7, 7, 9];
 /// The 4 possible rook directions
@@ -50,7 +50,7 @@ impl Move {
     }
     /// returns the special flag of the move
     pub fn special_flag(&self) -> u16 {
-        self.0 >> 12 as u16
+        self.0 >> 12_u16
     }
     /// checks if the move is a capture
     pub fn is_capture(&self) -> bool {
@@ -189,49 +189,46 @@ impl MoveGenerator {
 
             // 1. Capture Left (Towards the A-File)
             // A pawn can only capture left if it's NOT on the A-file (file 0)
-            if file != 0 {
-                if (pawn << 7) & enemy_pieces != 0 {
-                    available_moves.push(match color {
-                        Color::White => Move(index | (index + 7) << 6 | flag << 12),
-                        Color::Black => Move((index ^ 56) | ((index ^ 56) - 9) << 6 | flag << 12),
-                    });
+            if file != 0 && (pawn << 7) & enemy_pieces != 0 {
+                available_moves.push(match color {
+                    Color::White => Move(index | (index + 7) << 6 | flag << 12),
+                    Color::Black => Move((index ^ 56) | ((index ^ 56) - 9) << 6 | flag << 12),
+                });
 
-                    //check if the pawn takes with a promotion
-                    if is_promotion {
-                        for p in PROMOTIONS.iter() {
-                            available_moves.push(match color {
-                                Color::White => Move(index | (index + 7) << 6 | (p | flag) << 12),
-                                Color::Black => {
-                                    Move((index ^ 56) | ((index ^ 56) - 9) << 6 | (p | flag) << 12)
-                                }
-                            });
-                        }
+                //check if the pawn takes with a promotion
+                if is_promotion {
+                    for p in PROMOTIONS.iter() {
+                        available_moves.push(match color {
+                            Color::White => Move(index | (index + 7) << 6 | (p | flag) << 12),
+                            Color::Black => {
+                                Move((index ^ 56) | ((index ^ 56) - 9) << 6 | (p | flag) << 12)
+                            }
+                        });
                     }
                 }
             }
 
             // 2. Capture Right (Towards the H-File)
             // A pawn can only capture right if it's NOT on the H-file (file 7)
-            if file != 7 {
-                if (pawn << 9) & enemy_pieces != 0 {
+            if file != 7 && (pawn << 9) & enemy_pieces != 0 {
+                available_moves.push(match color {
+                    Color::White => Move(index | (index + 9) << 6 | flag << 12),
+                    Color::Black => Move((index ^ 56) | ((index ^ 56) - 7) << 6 | flag << 12),
+                });
+            }
+
+            //check if the pawn takes with a promotion
+            if is_promotion {
+                for p in PROMOTIONS.iter() {
                     available_moves.push(match color {
-                        Color::White => Move(index | (index + 9) << 6 | flag << 12),
-                        Color::Black => Move((index ^ 56) | ((index ^ 56) - 7) << 6 | flag << 12),
+                        Color::White => Move(index | (index + 9) << 6 | (p | flag) << 12),
+                        Color::Black => {
+                            Move((index ^ 56) | ((index ^ 56) - 7) << 6 | (p | flag) << 12)
+                        }
                     });
                 }
-
-                //check if the pawn takes with a promotion
-                if is_promotion {
-                    for p in PROMOTIONS.iter() {
-                        available_moves.push(match color {
-                            Color::White => Move(index | (index + 9) << 6 | (p | flag) << 12),
-                            Color::Black => {
-                                Move((index ^ 56) | ((index ^ 56) - 7) << 6 | (p | flag) << 12)
-                            }
-                        });
-                    }
-                }
             }
+
             // -- En Passant --
             // TODO: implement en passant check
 
@@ -253,9 +250,15 @@ impl MoveGenerator {
             // check all the possible moves
             for m in KNIGHT_MOVES.iter() {
                 let (moved_knight, target_index) = if m.is_negative() {
-                    (knight >> m.abs() as u16, index.wrapping_sub(m.abs() as u16))
+                    (
+                        knight >> m.unsigned_abs(),
+                        index.wrapping_sub(m.unsigned_abs()),
+                    )
                 } else {
-                    (knight << m.abs() as u16, index.wrapping_add(m.abs() as u16))
+                    (
+                        knight << m.unsigned_abs(),
+                        index.wrapping_add(m.unsigned_abs()),
+                    )
                 };
                 // check if the move is valid
                 if moved_knight == 0
@@ -290,9 +293,15 @@ impl MoveGenerator {
         // check all the possible moves
         for m in KING_MOVES.iter() {
             let (moved_king, target_index) = if m.is_negative() {
-                (king >> m.abs() as u16, index.wrapping_sub(m.abs() as u16))
+                (
+                    king >> m.unsigned_abs(),
+                    index.wrapping_sub(m.unsigned_abs()),
+                )
             } else {
-                (king << m.abs() as u16, index.wrapping_add(m.abs() as u16))
+                (
+                    king << m.unsigned_abs(),
+                    index.wrapping_add(m.unsigned_abs()),
+                )
             };
             // check if the move is valid
             if moved_king == 0
@@ -353,7 +362,7 @@ impl MoveGenerator {
                 let current_idx = current_indices[i];
 
                 // -- Check the Bounds --
-                if current_idx < 0 || current_idx > 63 {
+                if !(0..=63).contains(&current_idx) {
                     active_directions &= !(1 << i); // Deactivate this direction
                     continue;
                 }
@@ -364,18 +373,14 @@ impl MoveGenerator {
                         active_directions &= !(1 << i);
                         continue;
                     }
-                } else {
-                    if directions[i].abs() >= 8 {
-                        if current_file != prev_file {
-                            active_directions &= !(1 << i);
-                            continue;
-                        }
-                    } else {
-                        if (current_file - prev_file).abs() != 1 {
-                            active_directions &= !(1 << i);
-                            continue;
-                        }
+                } else if directions[i].abs() >= 8 {
+                    if current_file != prev_file {
+                        active_directions &= !(1 << i);
+                        continue;
                     }
+                } else if (current_file - prev_file).abs() != 1 {
+                    active_directions &= !(1 << i);
+                    continue;
                 }
 
                 // -- Check for obstacles --
