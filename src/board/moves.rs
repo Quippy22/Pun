@@ -6,6 +6,10 @@ const PROMOTIONS: [u16; 4] = [0b1000, 0b1010, 0b1100, 0b1110];
 const KNIGHT_MOVES: [i8; 8] = [17, 15, 10, 6, -17, -15, -10, -6];
 /// The 8 possible king moves as bit shifts
 const KING_MOVES: [i8; 8] = [-9, -8, -7, -1, 1, 7, 8, 9];
+/// The 4 possible bishop directions
+const BISHOP_DIRECTIONS: [i16; 4] = [-9, -7, 7, 9];
+/// The 4 possible rook directions
+const ROOK_DIRECTIONS: [i16; 4] = [-1, 1, -8, 8];
 
 /// Wrapper around u16
 /// holds the starting position
@@ -312,8 +316,163 @@ impl MoveGenerator {
 
         // TODO: check for castling
     }
+    /// --- Slider Pieces ---
+    // Shared parallel raycaster for Bishop, Rook, or Queen
+    #[inline(always)]
+    fn raycast_moves(
+        index: u16,
+        directions: &[i16],
+        own_pieces: u64,
+        enemy_pieces: u64,
+        color: &Color,
+        is_diagonal: bool,
+        available_moves: &mut Vec<Move>,
+    ) {
+        // Track which directions are still active.
+        // Index matches the direction array index
+        let mut active_directions = 0b1111u8;
 
-    fn get_all_bishop_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {}
-    fn get_all_rook_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {}
-    fn get_all_queen_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {}
+        // Keep track of the current square index for each of the 4 vectors
+        let mut current_indices = [index as i16; 4];
+
+        // a sliding piece can travel a maximum of 7 squares away
+        for _ in 1..=7 {
+            // if all 4 rays have hit an obstacle or the edge, exit
+            if active_directions == 0 {
+                break;
+            }
+
+            for i in 0..directions.len() {
+                // if this specific direction is already blocked, skip it
+                if (active_directions & (1 << i)) == 0 {
+                    continue;
+                }
+
+                let prev_file = current_indices[i] % 8;
+                current_indices[i] += directions[i];
+                let current_idx = current_indices[i];
+
+                // -- Check the Bounds --
+                if current_idx < 0 || current_idx > 63 {
+                    active_directions &= !(1 << i); // Deactivate this direction
+                    continue;
+                }
+
+                let current_file = current_idx % 8;
+                if is_diagonal {
+                    if (current_file - prev_file).abs() != 1 {
+                        active_directions &= !(1 << i);
+                        continue;
+                    }
+                } else {
+                    if directions[i].abs() >= 8 {
+                        if current_file != prev_file {
+                            active_directions &= !(1 << i);
+                            continue;
+                        }
+                    } else {
+                        if (current_file - prev_file).abs() != 1 {
+                            active_directions &= !(1 << i);
+                            continue;
+                        }
+                    }
+                }
+
+                // -- Check for obstacles --
+                let target_index = current_idx as u16;
+                let target_bit = 1 << target_index;
+
+                if (target_bit & own_pieces) != 0 {
+                    active_directions &= !(1 << i); // blocked completely
+                    continue;
+                }
+
+                // -- Check for capture --
+                let is_capture = (target_bit & enemy_pieces) != 0;
+                let flag = if is_capture { 0b0001 } else { 0b0000 };
+
+                available_moves.push(match color {
+                    Color::White => Move(index | target_index << 6 | flag << 12),
+                    Color::Black => Move((index ^ 56) | (target_index ^ 56) << 6 | flag << 12),
+                });
+
+                // Terminate ray after hitting the enemy
+                if is_capture {
+                    active_directions &= !(1 << i);
+                }
+            }
+        }
+    }
+
+    fn get_all_bishop_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
+        let (mut pieces, color) = Self::get_bitboard(board, piece);
+        let (own_pieces, enemy_pieces) = Self::get_sides(board, &color);
+        let mut index: u16;
+
+        while pieces != 0 {
+            index = pieces.trailing_zeros() as u16;
+            Self::raycast_moves(
+                index,
+                &BISHOP_DIRECTIONS,
+                own_pieces,
+                enemy_pieces,
+                &color,
+                true,
+                available_moves,
+            );
+
+            pieces &= pieces - 1;
+        }
+    }
+
+    fn get_all_rook_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
+        let (mut pieces, color) = Self::get_bitboard(board, piece);
+        let (own_pieces, enemy_pieces) = Self::get_sides(board, &color);
+        let mut index: u16;
+
+        while pieces != 0 {
+            index = pieces.trailing_zeros() as u16;
+            Self::raycast_moves(
+                index,
+                &ROOK_DIRECTIONS,
+                own_pieces,
+                enemy_pieces,
+                &color,
+                false,
+                available_moves,
+            );
+
+            pieces &= pieces - 1;
+        }
+    }
+
+    fn get_all_queen_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
+        let (mut pieces, color) = Self::get_bitboard(board, piece);
+        let (own_pieces, enemy_pieces) = Self::get_sides(board, &color);
+        let mut index: u16;
+
+        while pieces != 0 {
+            index = pieces.trailing_zeros() as u16;
+            Self::raycast_moves(
+                index,
+                &BISHOP_DIRECTIONS,
+                own_pieces,
+                enemy_pieces,
+                &color,
+                true,
+                available_moves,
+            );
+            Self::raycast_moves(
+                index,
+                &ROOK_DIRECTIONS,
+                own_pieces,
+                enemy_pieces,
+                &color,
+                false,
+                available_moves,
+            );
+
+            pieces &= pieces - 1;
+        }
+    }
 }
