@@ -1,11 +1,11 @@
 mod display;
 mod fen;
-mod moves;
+pub mod moves;
 
-use crate::board::fen::FenData;
+use crate::board::fen::*;
 
 /// Used to acces the bitboards by pice type
-enum Piece {
+pub enum Piece {
     WhitePawn = 0,
     WhiteKnight = 1,
     WhiteBishop = 2,
@@ -91,5 +91,30 @@ impl Board {
         }
 
         bitboard
+    }
+
+    pub fn update_state(&mut self, uci_move: &str) {
+        let from_str = &uci_move[0..2];
+        let to_str = &uci_move[2..4];
+
+        let from_sq = string_to_square(from_str);
+        let to_sq = string_to_square(to_str);
+
+        let from_mask: u64 = 1 << from_sq;
+        let to_mask: u64 = 1 << to_sq;
+
+        for bb in self.pieces.iter_mut() {
+            if (*bb & to_mask) != 0 {
+                *bb &= !to_mask;
+                break;
+            }
+        }
+        for bb in self.pieces.iter_mut() {
+            if (*bb & from_mask) != 0 {
+                *bb &= !from_mask;
+                *bb |= to_mask;
+                break;
+            }
+        }
     }
 }
