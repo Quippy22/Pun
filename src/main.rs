@@ -1,16 +1,15 @@
 mod board;
-use std::io::{self, BufRead};
-
 use crate::board::moves::MoveGenerator;
 use crate::board::{Board, Piece};
+use std::io::{self, BufRead, Write};
+
+const STARTPOS_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 fn main() {
     let stdin = io::stdin();
-    let mut iterator = stdin.lock().lines();
-    let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-    let mut board = Board::initialize_from_fen(fen);
+    let mut board = Board::initialize_from_fen(STARTPOS_FEN);
 
-    while let Some(line) = iterator.next() {
+    for line in stdin.lock().lines() {
         let line = line.unwrap();
         let tokens: Vec<&str> = line.split_whitespace().collect();
         if tokens.is_empty() {
@@ -19,38 +18,91 @@ fn main() {
 
         match tokens[0] {
             "uci" => {
+                println!("info string [uci] handshake received");
                 println!("id name Pun");
                 println!("id author Quippy");
                 println!("uciok");
+                io::stdout().flush().unwrap();
             }
+
             "isready" => {
+                println!("info string [isready] engine is ready");
                 println!("readyok");
+                io::stdout().flush().unwrap();
             }
-            "position" => match tokens[1] {
-                "fen" => {
-                    let fen = tokens[2..].join(" ");
-                    board = Board::initialize_from_fen(&fen);
+
+            "position" => {
+                if tokens.len() < 2 {
+                    println!("info string [position] no arguments given, ignoring");
+                    io::stdout().flush().unwrap();
+                    continue;
                 }
-                "startpos" => {
-                    if let Some(&last_move) = tokens.last() {
-                        board.update_state(last_move);
+
+                let moves_idx = tokens.iter().position(|&t| t == "moves");
+
+                match tokens[1] {
+                    "startpos" => {
+                        println!("info string [position] startpos received, resetting board");
+                        board = Board::initialize_from_fen(STARTPOS_FEN);
+                    }
+                    "fen" => {
+                        let fen_end = moves_idx.unwrap_or(tokens.len());
+                        let fen = tokens[2..fen_end].join(" ");
+                        println!("info string [position] fen received: {}", fen);
+                        board = Board::initialize_from_fen(&fen);
+                    }
+                    other => {
+                        println!("info string [position] unknown subcommand: {}", other);
+                        io::stdout().flush().unwrap();
+                        continue;
                     }
                 }
-                _ => {}
-            },
+
+                if let Some(idx) = moves_idx {
+                    let move_list = &tokens[idx + 1..];
+                    println!(
+                        "info string [position] applying {} move(s): {}",
+                        move_list.len(),
+                        move_list.join(", ")
+                    );
+                    for mv in move_list {
+                        board.update_state(mv);
+                    }
+                } else {
+                    println!("info string [position] no moves to apply");
+                }
+
+                io::stdout().flush().unwrap();
+            }
+
             "go" => {
+                println!("info string [go] thinking...");
+
                 let mut moves = vec![];
                 MoveGenerator::get_possible_moves(&board, Piece::WhitePawn, &mut moves);
+
+                println!("info string [go] generated {} move(s)", moves.len());
+
                 if !moves.is_empty() {
-                    println!("bestmove {}", moves[3]);
+                    println!("info string [go] playing {}", moves[0]);
+                    println!("bestmove {}", moves[0]);
                 } else {
+                    println!("info string [go] no moves found, sending null move");
                     println!("bestmove 0000");
                 }
+                io::stdout().flush().unwrap();
             }
+
             "quit" => {
+                println!("info string [quit] shutting down");
+                io::stdout().flush().unwrap();
                 break;
             }
-            _ => {}
+
+            other => {
+                println!("info string [unknown] unrecognized command: {}", other);
+                io::stdout().flush().unwrap();
+            }
         }
     }
 }
