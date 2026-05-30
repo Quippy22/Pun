@@ -4,7 +4,14 @@ pub mod moves;
 
 use crate::board::fen::*;
 
+/// Used to acces the bitboards by color
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Color {
+    White,
+    Black,
+}
 /// Used to acces the bitboards by pice type
+#[derive(Clone, Copy, Debug)]
 pub enum Piece {
     WhitePawn = 0,
     WhiteKnight = 1,
@@ -20,11 +27,14 @@ pub enum Piece {
     BlackKing = 11,
 }
 
-/// Used to acces the bitboards by color
-#[derive(Clone, Copy, Debug)]
-pub enum Color {
-    White,
-    Black,
+impl Piece {
+    pub fn color(&self) -> Color {
+        if *self as usize <= 5 {
+            Color::White
+        } else {
+            Color::Black
+        }
+    }
 }
 
 /// The board struct

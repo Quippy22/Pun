@@ -129,21 +129,14 @@ impl MoveGenerator {
     /// Returns the bitboard and the color of the piece.
     /// Automatically rotates the bitboard for the black pieces
     fn get_bitboard(board: &Board, piece: Piece) -> (u64, Color) {
-        let (pieces, color) = match piece {
-            Piece::WhitePawn => (board.pieces[piece as usize], Color::White),
-            Piece::BlackPawn => (board.pieces[piece as usize].swap_bytes(), Color::Black),
-            Piece::WhiteKnight => (board.pieces[piece as usize], Color::White),
-            Piece::BlackKnight => (board.pieces[piece as usize].swap_bytes(), Color::Black),
-            Piece::WhiteBishop => (board.pieces[piece as usize], Color::White),
-            Piece::BlackBishop => (board.pieces[piece as usize].swap_bytes(), Color::Black),
-            Piece::WhiteRook => (board.pieces[piece as usize], Color::White),
-            Piece::BlackRook => (board.pieces[piece as usize].swap_bytes(), Color::Black),
-            Piece::WhiteQueen => (board.pieces[piece as usize], Color::White),
-            Piece::BlackQueen => (board.pieces[piece as usize].swap_bytes(), Color::Black),
-            Piece::WhiteKing => (board.pieces[piece as usize], Color::White),
-            Piece::BlackKing => (board.pieces[piece as usize].swap_bytes(), Color::Black),
+        let color = piece.color();
+        let bb = board.pieces[piece as usize];
+        let bb = if color == Color::White {
+            bb
+        } else {
+            bb.swap_bytes()
         };
-        (pieces, color)
+        (bb, color)
     }
 
     /// Returns the bitboards for the own and enemy pieces
