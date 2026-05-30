@@ -40,6 +40,10 @@ const ROOK_DIRECTIONS: [i16; 4] = [-1, 1, -8, 8];
 pub struct Move(pub u16);
 
 impl Move {
+    /// Creates a new Move
+    pub fn new(start: u16, end: u16, flag: u16) -> Self {
+        Self(start | end << 6 | flag << 12)
+    }
     /// returns the current square of the piece
     pub fn start_pos(&self) -> usize {
         (self.0 & 0b111111) as usize
@@ -181,16 +185,14 @@ impl MoveGenerator {
                 if is_promotion {
                     for p in PROMOTIONS.iter() {
                         available_moves.push(match color {
-                            Color::White => Move(index | (index + 8) << 6 | (p | flag) << 12),
-                            Color::Black => {
-                                Move((index ^ 56) | ((index ^ 56) - 8) << 6 | (p | flag) << 12)
-                            }
+                            Color::White => Move::new(index, index + 8, flag | p),
+                            Color::Black => Move::new(index ^ 56, (index ^ 56) - 8, flag | p),
                         });
                     }
                 } else {
                     available_moves.push(match color {
-                        Color::White => Move(index | (index + 8) << 6 | flag << 12),
-                        Color::Black => Move((index ^ 56) | ((index ^ 56) - 8) << 6 | flag << 12),
+                        Color::White => Move::new(index, index + 8, flag),
+                        Color::Black => Move::new(index ^ 56, (index ^ 56) - 8, flag),
                     });
                 }
 
@@ -198,8 +200,8 @@ impl MoveGenerator {
                 // add the 2 square move
                 if index / 8 == 1 && pawn << 16 & (own_pieces | enemy_pieces) == 0 {
                     available_moves.push(match color {
-                        Color::White => Move(index | (index + 16) << 6 | flag << 12),
-                        Color::Black => Move((index ^ 56) | ((index ^ 56) - 16) << 6 | flag << 12),
+                        Color::White => Move::new(index, index + 16, flag),
+                        Color::Black => Move::new(index ^ 56, (index ^ 56) - 16, flag),
                     });
                 }
             }
@@ -215,18 +217,16 @@ impl MoveGenerator {
             // A pawn can only capture left if it's NOT on the A-file (file 0)
             if file != 0 && (pawn << 7) & enemy_pieces != 0 {
                 available_moves.push(match color {
-                    Color::White => Move(index | (index + 7) << 6 | flag << 12),
-                    Color::Black => Move((index ^ 56) | ((index ^ 56) - 9) << 6 | flag << 12),
+                    Color::White => Move::new(index, index + 7, flag),
+                    Color::Black => Move::new(index ^ 56, (index ^ 56) - 9, flag),
                 });
 
                 //check if the pawn takes with a promotion
                 if is_promotion {
                     for p in PROMOTIONS.iter() {
                         available_moves.push(match color {
-                            Color::White => Move(index | (index + 7) << 6 | (p | flag) << 12),
-                            Color::Black => {
-                                Move((index ^ 56) | ((index ^ 56) - 9) << 6 | (p | flag) << 12)
-                            }
+                            Color::White => Move::new(index, index + 7, flag | p),
+                            Color::Black => Move::new(index ^ 56, (index ^ 56) - 9, flag | p),
                         });
                     }
                 }
@@ -236,20 +236,18 @@ impl MoveGenerator {
             // A pawn can only capture right if it's NOT on the H-file (file 7)
             if file != 7 && (pawn << 9) & enemy_pieces != 0 {
                 available_moves.push(match color {
-                    Color::White => Move(index | (index + 9) << 6 | flag << 12),
-                    Color::Black => Move((index ^ 56) | ((index ^ 56) - 7) << 6 | flag << 12),
+                    Color::White => Move::new(index, index + 9, flag),
+                    Color::Black => Move::new(index ^ 56, (index ^ 56) - 7, flag),
                 });
-            }
 
-            //check if the pawn takes with a promotion
-            if is_promotion {
-                for p in PROMOTIONS.iter() {
-                    available_moves.push(match color {
-                        Color::White => Move(index | (index + 9) << 6 | (p | flag) << 12),
-                        Color::Black => {
-                            Move((index ^ 56) | ((index ^ 56) - 7) << 6 | (p | flag) << 12)
-                        }
-                    });
+                //check if the pawn takes with a promotion
+                if is_promotion {
+                    for p in PROMOTIONS.iter() {
+                        available_moves.push(match color {
+                            Color::White => Move::new(index, index + 9, flag | p),
+                            Color::Black => Move::new(index ^ 56, (index ^ 56) - 7, flag | p),
+                        });
+                    }
                 }
             }
 
@@ -299,8 +297,8 @@ impl MoveGenerator {
                     0b0000
                 };
                 available_moves.push(match color {
-                    Color::White => Move(index | target_index << 6 | flag << 12),
-                    Color::Black => Move((index ^ 56) | (target_index ^ 56) << 6 | flag << 12),
+                    Color::White => Move::new(index, target_index, flag),
+                    Color::Black => Move::new(index ^ 56, target_index ^ 56, flag),
                 });
             }
 
@@ -342,8 +340,8 @@ impl MoveGenerator {
                 0b0000
             };
             available_moves.push(match color {
-                Color::White => Move(index | target_index << 6 | flag << 12),
-                Color::Black => Move((index ^ 56) | (target_index ^ 56) << 6 | flag << 12),
+                Color::White => Move::new(index, target_index, flag),
+                Color::Black => Move::new(index ^ 56, target_index ^ 56, flag),
             });
         }
 
@@ -421,8 +419,8 @@ impl MoveGenerator {
                 let flag = if is_capture { 0b0001 } else { 0b0000 };
 
                 available_moves.push(match color {
-                    Color::White => Move(index | target_index << 6 | flag << 12),
-                    Color::Black => Move((index ^ 56) | (target_index ^ 56) << 6 | flag << 12),
+                    Color::White => Move::new(index, target_index, flag),
+                    Color::Black => Move::new(index ^ 56, target_index ^ 56, flag),
                 });
 
                 // Terminate ray after hitting the enemy
