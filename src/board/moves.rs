@@ -68,6 +68,30 @@ impl Move {
     pub fn is_castle(&self) -> bool {
         self.special_flag() == 0b0100 || self.special_flag() == 0b0110
     }
+
+    pub fn to_uci(&self) -> String {
+        let start = self.start_pos();
+        let end = self.end_pos();
+        let mut s = format!(
+            "{}{}{}{}",
+            (b'a' + (start % 8) as u8) as char,
+            (b'1' + (start / 8) as u8) as char,
+            (b'a' + (end % 8) as u8) as char,
+            (b'1' + (end / 8) as u8) as char,
+        );
+
+        if self.is_promotion() {
+            s.push(match self.special_flag() {
+                0b1000 => 'q',
+                0b1010 => 'r',
+                0b1100 => 'b',
+                0b1110 => 'n',
+                _ => 'q',
+            });
+        }
+
+        s
+    }
 }
 
 pub struct MoveGenerator;

@@ -85,7 +85,7 @@ fn main() {
 
                 if !moves.is_empty() {
                     println!("info string [go] playing {}", moves[0]);
-                    println!("bestmove {}", moves[0]);
+                    println!("bestmove {}", moves[0].to_uci());
                 } else {
                     println!("info string [go] no moves found, sending null move");
                     println!("bestmove 0000");
