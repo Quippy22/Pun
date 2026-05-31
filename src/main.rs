@@ -1,13 +1,17 @@
 mod board;
-use crate::board::moves::MoveGenerator;
-use crate::board::{Board, Piece};
 use std::io::{self, BufRead, Write};
+
+use rand::seq::SliceRandom;
+
+use crate::board::moves::MoveGenerator;
+use crate::board::{Board, Color};
 
 const STARTPOS_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 fn main() {
     let stdin = io::stdin();
     let mut board = Board::initialize_from_fen(STARTPOS_FEN);
+    let mut moves = vec![];
 
     for line in stdin.lock().lines() {
         let line = line.unwrap();
@@ -77,20 +81,25 @@ fn main() {
 
             "go" => {
                 println!("info string [go] thinking...");
-
-                let mut moves = vec![];
-                MoveGenerator::get_possible_moves(&board, Piece::WhitePawn, &mut moves);
+                // Find all the possible moves for the current board
+                MoveGenerator::get_all_moves(&board, board.side_to_move, &mut moves);
 
                 println!("info string [go] generated {} move(s)", moves.len());
+                moves.shuffle(&mut rand::rng());
 
                 if !moves.is_empty() {
                     println!("info string [go] playing {}", moves[0]);
                     println!("bestmove {}", moves[0].to_uci());
+                    board.update_state(&moves[0].to_uci());
+                    println!("info string [go] {}", board);
                 } else {
                     println!("info string [go] no moves found, sending null move");
                     println!("bestmove 0000");
                 }
                 io::stdout().flush().unwrap();
+
+                // clear the moves vector
+                moves.clear();
             }
 
             "quit" => {
