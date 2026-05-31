@@ -80,18 +80,18 @@ impl FenData {
                 } else {
                     // get the piece
                     let piece = match c {
-                        'p' => Piece::WhitePawn,
-                        'r' => Piece::WhiteRook,
-                        'n' => Piece::WhiteKnight,
-                        'b' => Piece::WhiteBishop,
-                        'q' => Piece::WhiteQueen,
-                        'k' => Piece::WhiteKing,
-                        'P' => Piece::BlackPawn,
-                        'R' => Piece::BlackRook,
-                        'N' => Piece::BlackKnight,
-                        'B' => Piece::BlackBishop,
-                        'Q' => Piece::BlackQueen,
-                        'K' => Piece::BlackKing,
+                        'P' => Piece::WhitePawn,
+                        'R' => Piece::WhiteRook,
+                        'N' => Piece::WhiteKnight,
+                        'B' => Piece::WhiteBishop,
+                        'Q' => Piece::WhiteQueen,
+                        'K' => Piece::WhiteKing,
+                        'p' => Piece::BlackPawn,
+                        'r' => Piece::BlackRook,
+                        'n' => Piece::BlackKnight,
+                        'b' => Piece::BlackBishop,
+                        'q' => Piece::BlackQueen,
+                        'k' => Piece::BlackKing,
                         _ => panic!("Invalid piece"),
                     };
                     bitboard[piece as usize] |= 1u64 << (rank * 8 + file);
