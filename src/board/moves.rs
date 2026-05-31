@@ -101,7 +101,14 @@ impl Move {
 pub struct MoveGenerator;
 
 impl MoveGenerator {
-    /// The main entry point of the move generator.
+    pub fn get_all_moves(board: &Board, color: Color, available_moves: &mut Vec<Move>) {
+        for piece in Piece::all() {
+            if piece.color() == color && board.pieces[piece as usize] != 0 {
+                Self::get_possible_moves(board, piece, available_moves);
+            }
+        }
+    }
+
     /// Returns a vector of all possible moves for a given piece
     pub fn get_possible_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
         match piece {

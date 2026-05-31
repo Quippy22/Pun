@@ -28,6 +28,24 @@ pub enum Piece {
 }
 
 impl Piece {
+    pub fn all() -> impl Iterator<Item = Self> {
+        [
+            Self::WhitePawn,
+            Self::WhiteKnight,
+            Self::WhiteBishop,
+            Self::WhiteRook,
+            Self::WhiteQueen,
+            Self::WhiteKing,
+            Self::BlackPawn,
+            Self::BlackKnight,
+            Self::BlackBishop,
+            Self::BlackRook,
+            Self::BlackQueen,
+            Self::BlackKing,
+        ]
+        .into_iter()
+    }
+
     pub fn color(&self) -> Color {
         if *self as usize <= 5 {
             Color::White
@@ -126,5 +144,15 @@ impl Board {
                 break;
             }
         }
+        
+        // update the self.colors
+        self.colors[0] = self.get_side_bitboard(Color::White);
+        self.colors[1] = self.get_side_bitboard(Color::Black);
+
+        // flip the side to move
+        self.side_to_move = match self.side_to_move {
+            Color::White => Color::Black,
+            Color::Black => Color::White,
+        };
     }
 }
