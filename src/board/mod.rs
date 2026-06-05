@@ -2,7 +2,8 @@ mod display;
 mod fen;
 pub mod moves;
 
-use crate::board::fen::*;
+use crate::board::fen::FenData;
+use crate::utils::string_to_square;
 
 /// Used to acces the bitboards by color
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -144,7 +145,7 @@ impl Board {
                 break;
             }
         }
-        
+
         // update the self.colors
         self.colors[0] = self.get_side_bitboard(Color::White);
         self.colors[1] = self.get_side_bitboard(Color::Black);

@@ -1,10 +1,9 @@
-mod board;
 use std::io::{self, BufRead, Write};
 
 use rand::seq::SliceRandom;
 
-use crate::board::moves::MoveGenerator;
-use crate::board::{Board, Color};
+use pun::board::Board;
+use pun::board::moves::MoveGenerator;
 
 const STARTPOS_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
