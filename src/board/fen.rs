@@ -38,6 +38,7 @@ impl FenData {
                     'Q' => rights |= 0b0010,
                     'k' => rights |= 0b0100,
                     'q' => rights |= 0b1000,
+                    '-' => {}
                     _ => panic!("Invalid castling rights"),
                 }
             }
@@ -102,5 +103,229 @@ impl FenData {
             }
         }
         bitboard
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // -- Helper --
+    /// Bit index for a square given algebraic notation rank/file.
+    /// rank 1-8, file 0-7 (a=0 … h=7).
+    fn sq(file: u8, rank: u8) -> u64 {
+        1u64 << ((rank - 1) * 8 + file)
+    }
+
+    // ── piece bitboard tests ──────────────────────────────────────────────────
+    mod bitboards {
+        use super::*;
+        /// Starting position — every piece on its canonical square.
+        /// Tests both digit skipping (the pawn ranks use a single "8")
+        /// and letter parsing for every piece type.
+        #[test]
+        fn test_pieces_starting_position() {
+            let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+            let data = FenData::parse(fen);
+
+            // White pawns on rank 2 (a2-h2)
+            assert_eq!(
+                data.pieces[Piece::WhitePawn as usize],
+                0x0000_0000_0000_FF00
+            );
+            // Black pawns on rank 7 (a7-h7)
+            assert_eq!(
+                data.pieces[Piece::BlackPawn as usize],
+                0x00FF_0000_0000_0000
+            );
+
+            // White back rank
+            assert_eq!(data.pieces[Piece::WhiteRook as usize], sq(0, 1) | sq(7, 1));
+            assert_eq!(
+                data.pieces[Piece::WhiteKnight as usize],
+                sq(1, 1) | sq(6, 1)
+            );
+            assert_eq!(
+                data.pieces[Piece::WhiteBishop as usize],
+                sq(2, 1) | sq(5, 1)
+            );
+            assert_eq!(data.pieces[Piece::WhiteQueen as usize], sq(3, 1));
+            assert_eq!(data.pieces[Piece::WhiteKing as usize], sq(4, 1));
+
+            // Black back rank
+            assert_eq!(data.pieces[Piece::BlackRook as usize], sq(0, 8) | sq(7, 8));
+            assert_eq!(
+                data.pieces[Piece::BlackKnight as usize],
+                sq(1, 8) | sq(6, 8)
+            );
+            assert_eq!(
+                data.pieces[Piece::BlackBishop as usize],
+                sq(2, 8) | sq(5, 8)
+            );
+            assert_eq!(data.pieces[Piece::BlackQueen as usize], sq(3, 8));
+            assert_eq!(data.pieces[Piece::BlackKing as usize], sq(4, 8));
+        }
+
+        /// Rank encoded as a single digit "8" → all squares empty.
+        #[test]
+        fn test_pieces_empty_rank_single_digit() {
+            // Only kings present; everything else must be zero
+            let fen = "8/8/8/8/8/8/8/4K2k w - - 0 1";
+            let data = FenData::parse(fen);
+
+            assert_eq!(data.pieces[Piece::WhiteKing as usize], sq(4, 1)); // e1
+            assert_eq!(data.pieces[Piece::BlackKing as usize], sq(7, 1)); // h1
+            // Verify all other bitboards are empty
+            for piece in [
+                Piece::WhitePawn,
+                Piece::WhiteKnight,
+                Piece::WhiteBishop,
+                Piece::WhiteRook,
+                Piece::WhiteQueen,
+                Piece::BlackPawn,
+                Piece::BlackKnight,
+                Piece::BlackBishop,
+                Piece::BlackRook,
+                Piece::BlackQueen,
+            ] {
+                assert_eq!(data.pieces[piece as usize], 0, "{piece:?} should be empty");
+            }
+        }
+
+        /// Rank with mixed digits and letters: "3r2r1" → rooks on d and g files.
+        #[test]
+        fn test_pieces_mixed_digits_and_letters() {
+            // rank 8: . . . r . . r .   (d8, g8)
+            let fen = "3r2r1/8/8/8/8/8/8/4K2k w - - 0 1";
+            let data = FenData::parse(fen);
+
+            assert_eq!(
+                data.pieces[Piece::BlackRook as usize],
+                sq(3, 8) | sq(6, 8) // d8 = file 3, g8 = file 6
+            );
+        }
+
+        /// Multiple consecutive digit groups: "2p3P1" on the same rank.
+        #[test]
+        fn test_pieces_consecutive_digit_groups() {
+            // rank 5: . . p . . . P .   (c5 black pawn, g5 white pawn)
+            let fen = "8/8/8/2p3P1/8/8/8/4K2k w - - 0 1";
+            let data = FenData::parse(fen);
+
+            assert_eq!(data.pieces[Piece::BlackPawn as usize], sq(2, 5)); // c5
+            assert_eq!(data.pieces[Piece::WhitePawn as usize], sq(6, 5)); // g5
+        }
+
+        /// A fully-packed rank with no digits at all: "RNBQKBNR".
+        #[test]
+        fn test_pieces_fully_packed_rank_no_digits() {
+            let fen = "8/8/8/8/8/8/8/RNBQKBNR w - - 0 1";
+            let data = FenData::parse(fen);
+
+            assert_eq!(data.pieces[Piece::WhiteRook as usize], sq(0, 1) | sq(7, 1));
+            assert_eq!(
+                data.pieces[Piece::WhiteKnight as usize],
+                sq(1, 1) | sq(6, 1)
+            );
+            assert_eq!(
+                data.pieces[Piece::WhiteBishop as usize],
+                sq(2, 1) | sq(5, 1)
+            );
+            assert_eq!(data.pieces[Piece::WhiteQueen as usize], sq(3, 1));
+            assert_eq!(data.pieces[Piece::WhiteKing as usize], sq(4, 1));
+        }
+    }
+
+    mod side_to_move {
+        use super::*;
+
+        #[test]
+        fn test_side_to_move_white() {
+            let fen = "8/8/8/8/8/8/8/4K2k w - - 0 1";
+            assert!(matches!(FenData::parse(fen).side_to_move, Color::White));
+        }
+
+        #[test]
+        fn test_side_to_move_black() {
+            let fen = "8/8/8/8/8/8/8/4K2k b - - 0 1";
+            assert!(matches!(FenData::parse(fen).side_to_move, Color::Black));
+        }
+    }
+
+    mod castling_rights {
+        use super::*;
+        #[test]
+        fn test_castling_all_rights() {
+            let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+            assert_eq!(FenData::parse(fen).castling_rights, 0b1111);
+        }
+
+        #[test]
+        fn test_castling_no_rights() {
+            let fen = "8/8/8/8/8/8/8/4K2k w - - 0 1";
+            assert_eq!(FenData::parse(fen).castling_rights, 0b0000);
+        }
+
+        #[test]
+        fn test_castling_white_kingside_only() {
+            let fen = "8/8/8/8/8/8/8/4K2k w K - 0 1";
+            assert_eq!(FenData::parse(fen).castling_rights, 0b0001);
+        }
+
+        #[test]
+        fn test_castling_black_queenside_only() {
+            let fen = "8/8/8/8/8/8/8/4K2k w q - 0 1";
+            assert_eq!(FenData::parse(fen).castling_rights, 0b1000);
+        }
+    }
+
+    mod en_passant {
+        use super::*;
+        #[test]
+        fn test_en_passant_none() {
+            let fen = "8/8/8/8/8/8/8/4K2k w - - 0 1";
+            assert_eq!(FenData::parse(fen).en_passant_sq, None);
+        }
+
+        #[test]
+        fn test_en_passant_e6() {
+            let fen = "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 1";
+            // e6 = file 4, rank 6 → index = (6-1)*8 + 4 = 44
+            assert_eq!(FenData::parse(fen).en_passant_sq, Some(44));
+        }
+
+        #[test]
+        fn test_en_passant_a3() {
+            let fen = "8/8/8/8/Pp6/8/8/4K2k b - a3 0 1";
+            // a3 = file 0, rank 3 → index = 2*8 + 0 = 16
+            assert_eq!(FenData::parse(fen).en_passant_sq, Some(16));
+        }
+    }
+
+    mod move_counters {
+        use super::*;
+        #[test]
+        fn test_move_counters_initial() {
+            let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+            let data = FenData::parse(fen);
+            assert_eq!(data.half_move, 0);
+            assert_eq!(data.full_move, 1);
+        }
+
+        #[test]
+        fn test_move_counters_midgame() {
+            let fen = "r1bqkb1r/pp3ppp/2n1pn2/3p4/3P4/2N1PN2/PP3PPP/R1BQKB1R w KQkq - 2 7";
+            let data = FenData::parse(fen);
+            assert_eq!(data.half_move, 2);
+            assert_eq!(data.full_move, 7);
+        }
+
+        #[test]
+        fn test_move_counters_large_values() {
+            let fen = "8/8/8/8/8/8/8/4K2k w - - 100 250";
+            let data = FenData::parse(fen);
+            assert_eq!(data.half_move, 100);
+            assert_eq!(data.full_move, 250);
+        }
     }
 }
