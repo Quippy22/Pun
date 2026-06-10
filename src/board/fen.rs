@@ -117,7 +117,6 @@ mod tests {
         1u64 << ((rank - 1) * 8 + file)
     }
 
-    // ── piece bitboard tests ──────────────────────────────────────────────────
     mod bitboards {
         use super::*;
         /// Starting position — every piece on its canonical square.

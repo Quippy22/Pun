@@ -3,14 +3,14 @@ use std::io::{self, BufRead, Write};
 use rand::seq::SliceRandom;
 
 use pun::board::Board;
-use pun::board::moves::MoveGenerator;
+use pun::board::moves::{Move, MoveGenerator};
 
 const STARTPOS_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 fn main() {
     let stdin = io::stdin();
     let mut board = Board::initialize_from_fen(STARTPOS_FEN);
-    let mut moves = vec![];
+    let mut moves: Vec<Move> = vec![];
 
     for line in stdin.lock().lines() {
         let line = line.unwrap();
@@ -90,7 +90,6 @@ fn main() {
                     println!("info string [go] playing {}", moves[0]);
                     println!("bestmove {}", moves[0].to_uci());
                     board.update_state(&moves[0].to_uci());
-                    println!("info string [go] {}", board);
                 } else {
                     println!("info string [go] no moves found, sending null move");
                     println!("bestmove 0000");

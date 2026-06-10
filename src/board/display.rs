@@ -148,7 +148,7 @@ impl fmt::Display for Move {
 
         // 4. Handle all explicit promotion options cleanly
         if self.is_promotion() {
-            match self.special_flag() {
+            match self.special_flag() & !0b0001 {
                 0b1000 => write!(f, "q")?,
                 0b1010 => write!(f, "r")?,
                 0b1100 => write!(f, "b")?,
