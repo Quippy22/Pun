@@ -432,18 +432,27 @@ mod tests {
             #[test]
             fn test_white_king_safe_behind_pawn_wall() {
                 // full pawn wall on rank 2, black rook on e8 cannot reach king
-                assert!(!is_check("3rk3/8/8/8/8/8/PPPPPPPP/4K3 w - - 0 1", Color::White));
+                assert!(!is_check(
+                    "3rk3/8/8/8/8/8/PPPPPPPP/4K3 w - - 0 1",
+                    Color::White
+                ));
             }
 
             #[test]
             fn test_white_king_exposed_after_pawn_gap() {
                 // gap on e2, black rook on e8 reaches king on e1
-                assert!(is_check("3rk3/8/8/8/8/8/PPPP1PPP/4K3 w - - 0 1", Color::White));
+                assert!(is_check(
+                    "3rk3/8/8/8/8/8/PPPP1PPP/4K3 w - - 0 1",
+                    Color::White
+                ));
             }
 
             #[test]
             fn test_black_king_safe_behind_pawn_wall() {
-                assert!(!is_check("4k3/pppppppp/8/8/8/8/8/4K3 b - - 0 1", Color::Black));
+                assert!(!is_check(
+                    "4k3/pppppppp/8/8/8/8/8/4K3 b - - 0 1",
+                    Color::Black
+                ));
             }
         }
 
@@ -483,7 +492,11 @@ mod tests {
             fn test_pinned_piece_cannot_move_off_pin_ray() {
                 // white rook e4 pinned by black rook e8, king e1
                 let moves = legal_moves("4r2k/8/8/8/4R3/8/8/4K3 w - - 0 1", Color::White);
-                assert!(!moves.iter().any(|m| m.starts_with("e4") && !m.starts_with("e4e")));
+                assert!(
+                    !moves
+                        .iter()
+                        .any(|m| m.starts_with("e4") && !m.starts_with("e4e"))
+                );
             }
 
             #[test]
