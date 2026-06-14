@@ -57,7 +57,7 @@ impl Piece {
 }
 
 /// The board struct
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Board {
     /// The bitboards
     pub pieces: [u64; 12],
@@ -79,6 +79,11 @@ pub struct Board {
 }
 
 impl Board {
+    const WHITE_KINGSIDE: u8 = 0b0001;
+    const WHITE_QUEENSIDE: u8 = 0b0010;
+    const BLACK_KINGSIDE: u8 = 0b0100;
+    const BLACK_QUEENSIDE: u8 = 0b1000;
+
     pub fn initialize_from_fen(fen: &str) -> Self {
         let fen_data = FenData::parse(fen);
         let white_bitboard = Self::get_color_bitboard(&fen_data.pieces, Color::White);
@@ -122,36 +127,182 @@ impl Board {
         bitboard
     }
 
+    fn refresh_colors(&mut self) {
+        self.colors[0] = self.get_side_bitboard(Color::White);
+        self.colors[1] = self.get_side_bitboard(Color::Black);
+    }
+
+    fn piece_at(&self, square: u8) -> Option<Piece> {
+        let mask = 1u64 << square;
+        Piece::all().find(|piece| self.pieces[*piece as usize] & mask != 0)
+    }
+
+    fn remove_piece_at(&mut self, square: u8) -> Option<Piece> {
+        let mask = 1u64 << square;
+        for piece in Piece::all() {
+            let bb = &mut self.pieces[piece as usize];
+            if (*bb & mask) != 0 {
+                *bb &= !mask;
+                return Some(piece);
+            }
+        }
+        None
+    }
+
+    fn place_piece_at(&mut self, piece: Piece, square: u8) {
+        self.pieces[piece as usize] |= 1u64 << square;
+    }
+
+    fn clear_castling_rights_for_rook_square(&mut self, square: u8) {
+        self.castling_rights &= match square {
+            0 => !Self::WHITE_QUEENSIDE,
+            7 => !Self::WHITE_KINGSIDE,
+            56 => !Self::BLACK_QUEENSIDE,
+            63 => !Self::BLACK_KINGSIDE,
+            _ => 0b1111,
+        };
+    }
+
     pub fn update_state(&mut self, uci_move: &str) {
         let from_str = &uci_move[0..2];
         let to_str = &uci_move[2..4];
+        let promotion = uci_move.as_bytes().get(4).copied().map(char::from);
 
         let from_sq = string_to_square(from_str);
         let to_sq = string_to_square(to_str);
+        let moving_color = self.side_to_move;
+        let moving_piece = self
+            .piece_at(from_sq)
+            .unwrap_or_else(|| panic!("No piece found on {}", from_str));
+        let target_piece = self.piece_at(to_sq);
+        let prev_en_passant_sq = self.en_passant_sq;
 
-        let from_mask: u64 = 1 << from_sq;
-        let to_mask: u64 = 1 << to_sq;
+        let is_pawn = matches!(moving_piece, Piece::WhitePawn | Piece::BlackPawn);
 
-        for bb in self.pieces.iter_mut() {
-            if (*bb & to_mask) != 0 {
-                *bb &= !to_mask;
-                break;
+        // Clear the previous en passant square unless a new double pawn push creates one.
+        self.en_passant_sq = None;
+
+        // Handle en passant captures before moving the pawn.
+        let mut captured_piece = target_piece;
+        let mut captured_sq = if target_piece.is_some() { Some(to_sq) } else { None };
+
+        if is_pawn
+            && target_piece.is_none()
+            && from_sq % 8 != to_sq % 8
+            && prev_en_passant_sq == Some(to_sq)
+        {
+            let ep_capture_sq = match moving_color {
+                Color::White => to_sq
+                    .checked_sub(8)
+                    .expect("white en passant capture square underflow"),
+                Color::Black => to_sq
+                    .checked_add(8)
+                    .expect("black en passant capture square overflow"),
+            };
+            captured_piece = self.remove_piece_at(ep_capture_sq);
+            captured_sq = Some(ep_capture_sq);
+        }
+
+        // Remove the moving piece from its origin square.
+        self.remove_piece_at(from_sq);
+
+        // If the move captured a rook on its home square, update castling rights.
+        if let Some(Piece::WhiteRook | Piece::BlackRook) = captured_piece {
+            if let Some(square) = captured_sq {
+                self.clear_castling_rights_for_rook_square(square);
             }
         }
-        for bb in self.pieces.iter_mut() {
-            if (*bb & from_mask) != 0 {
-                *bb &= !from_mask;
-                *bb |= to_mask;
-                break;
+
+        // Update castling rights for a king or rook move.
+        match moving_piece {
+            Piece::WhiteKing => self.castling_rights &= !(Self::WHITE_KINGSIDE | Self::WHITE_QUEENSIDE),
+            Piece::BlackKing => self.castling_rights &= !(Self::BLACK_KINGSIDE | Self::BLACK_QUEENSIDE),
+            Piece::WhiteRook | Piece::BlackRook => self.clear_castling_rights_for_rook_square(from_sq),
+            _ => {}
+        }
+
+        // Handle castling rook movement.
+        match (moving_piece, from_sq, to_sq) {
+            (Piece::WhiteKing, 4, 6) => {
+                self.remove_piece_at(7);
+                self.place_piece_at(Piece::WhiteRook, 5);
+            }
+            (Piece::WhiteKing, 4, 2) => {
+                self.remove_piece_at(0);
+                self.place_piece_at(Piece::WhiteRook, 3);
+            }
+            (Piece::BlackKing, 60, 62) => {
+                self.remove_piece_at(63);
+                self.place_piece_at(Piece::BlackRook, 61);
+            }
+            (Piece::BlackKing, 60, 58) => {
+                self.remove_piece_at(56);
+                self.place_piece_at(Piece::BlackRook, 59);
+            }
+            _ => {}
+        }
+
+        // Handle promotions or normal piece placement.
+        let piece_to_place = if is_pawn {
+            match promotion {
+                Some('q') => match moving_color {
+                    Color::White => Piece::WhiteQueen,
+                    Color::Black => Piece::BlackQueen,
+                },
+                Some('r') => match moving_color {
+                    Color::White => Piece::WhiteRook,
+                    Color::Black => Piece::BlackRook,
+                },
+                Some('b') => match moving_color {
+                    Color::White => Piece::WhiteBishop,
+                    Color::Black => Piece::BlackBishop,
+                },
+                Some('n') => match moving_color {
+                    Color::White => Piece::WhiteKnight,
+                    Color::Black => Piece::BlackKnight,
+                },
+                Some(other) => panic!("Invalid promotion piece: {}", other),
+                None => moving_piece,
+            }
+        } else {
+            moving_piece
+        };
+        self.place_piece_at(piece_to_place, to_sq);
+
+        // Set en passant target after a double pawn push.
+        if is_pawn {
+            match moving_color {
+                Color::White if from_sq + 16 == to_sq => {
+                    self.en_passant_sq = Some(from_sq + 8);
+                }
+                Color::Black if from_sq == to_sq + 16 => {
+                    self.en_passant_sq = Some(from_sq - 8);
+                }
+                _ => {}
             }
         }
 
-        // update the self.colors
-        self.colors[0] = self.get_side_bitboard(Color::White);
-        self.colors[1] = self.get_side_bitboard(Color::Black);
+        // Update clocks.
+        if is_pawn || captured_piece.is_some() {
+            self.half_move_clock = 0;
+        } else {
+            self.half_move_clock = self
+                .half_move_clock
+                .checked_add(1)
+                .expect("halfmove clock overflow");
+        }
+
+        if matches!(moving_color, Color::Black) {
+            self.full_move_clock = self
+                .full_move_clock
+                .checked_add(1)
+                .expect("fullmove clock overflow");
+        }
+
+        self.refresh_colors();
 
         // flip the side to move
-        self.side_to_move = match self.side_to_move {
+        self.side_to_move = match moving_color {
             Color::White => Color::Black,
             Color::Black => Color::White,
         };

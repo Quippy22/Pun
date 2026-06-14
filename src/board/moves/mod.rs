@@ -5,8 +5,6 @@ pub(crate) mod sliders;
 
 use crate::board::{Board, Color, Piece};
 
-/// The 8 possible king moves as bit shifts
-const KING_MOVES: [i16; 8] = [-9, -8, -7, -1, 1, 7, 8, 9];
 
 /// Wrapper around u16
 /// holds the starting position
@@ -164,45 +162,4 @@ impl MoveGenerator {
         (own_bitboard, enemy_bitboard)
     }
 
-    fn get_all_king_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
-        let (pieces, color) = Self::get_bitboard(board, piece);
-        let (own_pieces, enemy_pieces) = Self::get_sides(board, color);
-        let index: u16 = pieces.trailing_zeros() as u16;
-        let king: u64 = 1 << index;
-
-        // check all the possible moves
-        for m in KING_MOVES.iter() {
-            let (moved_king, target_index) = if m.is_negative() {
-                (
-                    king >> m.unsigned_abs(),
-                    index.wrapping_sub(m.unsigned_abs()),
-                )
-            } else {
-                (
-                    king << m.unsigned_abs(),
-                    index.wrapping_add(m.unsigned_abs()),
-                )
-            };
-            // check if the move is valid
-            if moved_king == 0
-                || ((target_index % 8) as i16 - (index % 8) as i16).abs() > 1
-                || (moved_king & own_pieces) != 0
-            {
-                continue;
-            }
-
-            // check for capture
-            let flag = if moved_king & enemy_pieces != 0 {
-                0b0001
-            } else {
-                0b0000
-            };
-            available_moves.push(match color {
-                Color::White => Move::new(index, target_index, flag),
-                Color::Black => Move::new(index ^ 56, target_index ^ 56, flag),
-            });
-        }
-
-        // TODO: check for castling
-    }
 }
