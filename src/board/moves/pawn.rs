@@ -5,6 +5,7 @@ const PROMOTIONS: [u16; 4] = [0b1000, 0b1010, 0b1100, 0b1110];
 
 impl MoveGenerator {
     /// Generates all pseudo-legal pawn moves for one side.
+    #[inline]
     pub(super) fn get_all_pawn_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
         let (mut pieces, color) = Self::get_bitboard(board, piece);
         let (own_pieces, enemy_pieces) = Self::get_sides(board, color);

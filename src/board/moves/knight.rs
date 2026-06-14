@@ -4,6 +4,7 @@ use super::*;
 const KNIGHT_MOVES: [i16; 8] = [17, 15, 10, 6, -17, -15, -10, -6];
 
 impl MoveGenerator {
+    #[inline(always)]
     pub(super) fn get_all_knight_moves(
         board: &Board,
         piece: Piece,

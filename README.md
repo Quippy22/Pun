@@ -19,7 +19,7 @@ The project is intentionally built in small steps so each subsystem can be teste
 - [x] Bitboard board representation
 - [x] Pseudo-legal move generation
 - [x] UCI-style command loop
-- [ ] Legal move generation
+- [x] Legal move generation
 - [ ] Castling
 - [ ] En passant
 - [ ] Make/unmake move support

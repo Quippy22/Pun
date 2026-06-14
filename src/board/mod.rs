@@ -14,7 +14,7 @@ pub enum Color {
     Black,
 }
 /// Piece identifiers and their backing bitboard indices.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Piece {
     /// White pawn bitboard index.
     WhitePawn = 0,
@@ -329,7 +329,7 @@ impl Board {
     // -- HELPERS --
 
     /// Refreshes the cached occupancy masks after a board mutation.
-    fn refresh_colors(&mut self) {
+    pub fn refresh_colors(&mut self) {
         self.colors[0] = self.get_side_bitboard(Color::White);
         self.colors[1] = self.get_side_bitboard(Color::Black);
     }

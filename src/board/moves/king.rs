@@ -5,6 +5,7 @@ const KING_MOVES: [i16; 8] = [-9, -8, -7, -1, 1, 7, 8, 9];
 
 impl MoveGenerator {
     /// Generates all pseudo-legal king moves for one side.
+    #[inline(always)]
     pub(super) fn get_all_king_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
         let (pieces, color) = Self::get_bitboard(board, piece);
         let (own_pieces, enemy_pieces) = Self::get_sides(board, color);
