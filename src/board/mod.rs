@@ -195,6 +195,11 @@ impl Board {
             None
         };
 
+        // Remove the captured piece
+        if target_piece.is_some() {
+            self.remove_piece_at(to_sq);
+        }
+
         if is_pawn
             && target_piece.is_none()
             && from_sq % 8 != to_sq % 8
