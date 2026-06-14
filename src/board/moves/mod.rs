@@ -231,18 +231,6 @@ impl MoveGenerator {
 
         Self::get_all_queen_moves(&queen, queen_piece, &mut moves);
 
-        // --- debug ---
-        for mv in moves.iter().filter(|m| m.is_capture()) {
-            let sq = mv.end_pos() as u8;
-            let p = board.piece_at(sq);
-            println!(
-                "is_check capture: {} sq:{} piece:{:?} in_sliders:{}",
-                mv.to_uci(),
-                sq,
-                p,
-                p.map(|x| enemy_sliders.contains(&x)).unwrap_or(false)
-            );
-        }
         if moves.iter().any(|mv| {
             if !mv.is_capture() {
                 return false;
