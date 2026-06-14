@@ -1,12 +1,15 @@
 use super::*;
 
-/// The 4 possible bishop directions
+/// The 4 possible bishop directions.
 const BISHOP_DIRECTIONS: [i16; 4] = [-9, -7, 7, 9];
-/// The 4 possible rook directions
+/// The 4 possible rook directions.
 const ROOK_DIRECTIONS: [i16; 4] = [-1, 1, -8, 8];
 
 impl MoveGenerator {
-    /// Shared parallel raycaster for Bishop, Rook, or Queen.
+    /// Shared raycaster for bishop, rook, and queen moves.
+    ///
+    /// The helper walks each direction one step at a time, stopping when it
+    /// hits the edge of the board, one of our own pieces, or a capture.
     #[inline(always)]
     fn raycast_moves(
         index: u16,
@@ -17,7 +20,9 @@ impl MoveGenerator {
         is_diagonal: bool,
         available_moves: &mut Vec<Move>,
     ) {
+        // Each bit tracks whether a ray is still alive.
         let mut active_directions = 0b1111u8;
+        // Each direction gets its own current square index.
         let mut current_indices = [index as i16; 4];
 
         for _ in 1..=7 {
@@ -41,16 +46,19 @@ impl MoveGenerator {
 
                 let current_file = current_idx % 8;
                 if is_diagonal {
+                    // Diagonal rays must move exactly one file per step.
                     if (current_file - prev_file).abs() != 1 {
                         active_directions &= !(1 << i);
                         continue;
                     }
                 } else if directions[i].abs() >= 8 {
+                    // Vertical rays must stay on the same file.
                     if current_file != prev_file {
                         active_directions &= !(1 << i);
                         continue;
                     }
                 } else if (current_file - prev_file).abs() != 1 {
+                    // Horizontal rays must move exactly one file per step.
                     active_directions &= !(1 << i);
                     continue;
                 }
@@ -58,11 +66,13 @@ impl MoveGenerator {
                 let target_index = current_idx as u16;
                 let target_bit = 1 << target_index;
 
+                // Own pieces block the ray without generating a move.
                 if (target_bit & own_pieces) != 0 {
                     active_directions &= !(1 << i);
                     continue;
                 }
 
+                // Enemy pieces are capturable, but also terminate the ray.
                 let is_capture = (target_bit & enemy_pieces) != 0;
                 let flag = if is_capture { 0b0001 } else { 0b0000 };
 

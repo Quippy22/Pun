@@ -1,9 +1,10 @@
 use super::*;
 
-/// Special promotion flags
+/// Promotion flag combinations used by pawn move generation.
 const PROMOTIONS: [u16; 4] = [0b1000, 0b1010, 0b1100, 0b1110];
 
 impl MoveGenerator {
+    /// Generates all pseudo-legal pawn moves for one side.
     pub(super) fn get_all_pawn_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
         let (mut pieces, color) = Self::get_bitboard(board, piece);
         let (own_pieces, enemy_pieces) = Self::get_sides(board, color);
@@ -18,11 +19,10 @@ impl MoveGenerator {
 
             let mut flag = 0b0000;
 
-            // -- Forward Moves --
-            // check for pieces in front of the pawn
+            // Forward moves are only legal if the square ahead is empty.
             if pawn << 8 & (own_pieces | enemy_pieces) == 0 {
-                // if the pawn is on the 7th rank
-                // add the promotion flag
+                // Promotion moves are emitted as four separate moves so the
+                // caller can pick the promoted piece later.
                 if is_promotion {
                     for p in PROMOTIONS.iter() {
                         available_moves.push(match color {
@@ -37,8 +37,8 @@ impl MoveGenerator {
                     });
                 }
 
-                // if the pawn is on the 2nd rank
-                // add the 2 square move
+                // A double push is only available from the starting rank and
+                // only when both squares are empty.
                 if index / 8 == 1 && pawn << 16 & (own_pieces | enemy_pieces) == 0 {
                     available_moves.push(match color {
                         Color::White => Move::new(index, index + 16, flag),
@@ -47,22 +47,19 @@ impl MoveGenerator {
                 }
             }
 
-            // -- Captures --
-            // get all the enemy pieces
-            // set the flag to capture
+            // Capture moves are marked separately from quiet moves.
             flag |= 0b0001;
 
             let file = index % 8;
 
-            // 1. Capture Left (Towards the A-File)
-            // A pawn can only capture left if it's NOT on the A-file (file 0)
+            // Left capture means "toward the A-file" from White's perspective.
             if file != 0 && (pawn << 7) & enemy_pieces != 0 {
                 available_moves.push(match color {
                     Color::White => Move::new(index, index + 7, flag),
                     Color::Black => Move::new(index ^ 56, (index ^ 56) - 9, flag),
                 });
 
-                //check if the pawn takes with a promotion
+                // Promotion captures are emitted as separate moves too.
                 if is_promotion {
                     for p in PROMOTIONS.iter() {
                         available_moves.push(match color {
@@ -73,15 +70,14 @@ impl MoveGenerator {
                 }
             }
 
-            // 2. Capture Right (Towards the H-File)
-            // A pawn can only capture right if it's NOT on the H-file (file 7)
+            // Right capture means "toward the H-file" from White's perspective.
             if file != 7 && (pawn << 9) & enemy_pieces != 0 {
                 available_moves.push(match color {
                     Color::White => Move::new(index, index + 9, flag),
                     Color::Black => Move::new(index ^ 56, (index ^ 56) - 7, flag),
                 });
 
-                //check if the pawn takes with a promotion
+                // Promotion captures are emitted as separate moves too.
                 if is_promotion {
                     for p in PROMOTIONS.iter() {
                         available_moves.push(match color {
@@ -92,7 +88,7 @@ impl MoveGenerator {
                 }
             }
 
-            // -- En Passant --
+            // En passant is wired later once the move legality layer exists.
             // TODO: implement en passant check
 
             // clear the bit

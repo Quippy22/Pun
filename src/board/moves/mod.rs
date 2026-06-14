@@ -5,11 +5,12 @@ pub(crate) mod sliders;
 
 use crate::board::{Board, Color, Piece};
 
-
-/// Wrapper around u16
-/// holds the starting position
-/// the ending position
-/// and a special flag:
+/// Compact move encoding used throughout the engine.
+///
+/// The value stores:
+/// - from-square
+/// - to-square
+/// - special move flags
 ///
 /// Slots:   15 14 13 12 | 11 10  9  8  7  6 |  5  4  3  2  1  0
 ///        +-------------+-------------------+-----------------+
@@ -35,39 +36,40 @@ use crate::board::{Board, Color, Piece};
 pub struct Move(pub u16);
 
 impl Move {
-    /// Creates a new Move
+    /// Creates a new encoded move.
     pub fn new(start: u16, end: u16, flag: u16) -> Self {
         Self(start | end << 6 | flag << 12)
     }
-    /// returns the current square of the piece
+    /// Returns the source square index.
     pub fn start_pos(&self) -> usize {
         (self.0 & 0b111111) as usize
     }
-    /// returns the end square of the piece
+    /// Returns the destination square index.
     pub fn end_pos(&self) -> usize {
         ((self.0 >> 6) & 0b111111) as usize
     }
-    /// returns the special flag of the move
+    /// Returns the special flag nibble.
     pub fn special_flag(&self) -> u16 {
         self.0 >> 12_u16
     }
-    /// checks if the move is a capture
+    /// Returns `true` if this move captures a piece.
     pub fn is_capture(&self) -> bool {
         (self.special_flag() & 0b0001) == 1
     }
-    /// checks if the move is a promotion
+    /// Returns `true` if this move is a promotion.
     pub fn is_promotion(&self) -> bool {
         (self.special_flag() & 0b1000) == 0b1000
     }
-    /// checks if the move is En Passant
+    /// Returns `true` if this move is an en passant capture.
     pub fn is_en_passant(&self) -> bool {
         self.special_flag() == 0b0011
     }
-    //checks if the move is a castle
+    /// Returns `true` if this move is a castle.
     pub fn is_castle(&self) -> bool {
         self.special_flag() == 0b0100 || self.special_flag() == 0b0110
     }
 
+    /// Returns the promoted piece letter, ignoring the capture bit.
     fn promotion_piece(&self) -> Option<char> {
         match self.special_flag() & !0b0001 {
             0b1000 => Some('q'),
@@ -78,6 +80,7 @@ impl Move {
         }
     }
 
+    /// Formats the move as UCI.
     pub fn to_uci(&self) -> String {
         let start = self.start_pos();
         let end = self.end_pos();
@@ -97,9 +100,11 @@ impl Move {
     }
 }
 
+/// Stateless move generator entrypoint.
 pub struct MoveGenerator;
 
 impl MoveGenerator {
+    /// Generates all pseudo-legal moves for a side.
     pub fn get_all_moves(board: &Board, color: Color, available_moves: &mut Vec<Move>) {
         for piece in Piece::all() {
             if piece.color() == color && board.pieces[piece as usize] != 0 {
@@ -108,7 +113,7 @@ impl MoveGenerator {
         }
     }
 
-    /// Returns a vector of all possible moves for a given piece
+    /// Generates all pseudo-legal moves for a single piece type.
     pub fn get_possible_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
         match piece {
             Piece::WhitePawn | Piece::BlackPawn => {
@@ -132,8 +137,10 @@ impl MoveGenerator {
         }
     }
 
-    /// Returns the bitboard and the color of the piece.
-    /// Automatically rotates the bitboard for the black pieces
+    /// Returns the bitboard and color for a piece type.
+    ///
+    /// Black bitboards are byte-swapped into the same orientation as white so
+    /// the shift logic can stay symmetric.
     fn get_bitboard(board: &Board, piece: Piece) -> (u64, Color) {
         let color = piece.color();
         let bb = board.pieces[piece as usize];
@@ -145,8 +152,7 @@ impl MoveGenerator {
         (bb, color)
     }
 
-    /// Returns the bitboards for the own and enemy pieces
-    /// Automatically rotates the bitboards for the black pieces
+    /// Returns own and enemy occupancy masks in the working orientation.
     fn get_sides(board: &Board, color: Color) -> (u64, u64) {
         let (own_bitboard, enemy_bitboard) = match color {
             Color::White => (

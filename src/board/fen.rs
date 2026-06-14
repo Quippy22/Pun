@@ -1,27 +1,32 @@
 use crate::board::{Color, Piece};
 use crate::utils::string_to_square;
 
+/// Parsed FEN fields used to initialize a `Board`.
 pub struct FenData {
+    /// Piece bitboards in board storage order.
     pub pieces: [u64; 12],
+    /// Side to move.
     pub side_to_move: Color,
+    /// Castling-right bit mask.
     pub castling_rights: u8,
+    /// En passant target square, if present.
     pub en_passant_sq: Option<u8>,
+    /// Halfmove clock from the FEN.
     pub half_move: u16,
+    /// Fullmove number from the FEN.
     pub full_move: u16,
 }
 
 impl FenData {
+    /// Parses a full FEN string into structured board data.
     pub fn parse(fen: &str) -> FenData {
-        // split the fen into rows
-        // the last element also containst the pieces
+        // Split the board layout from the rest of the FEN. The last slash
+        // segment still contains the side-to-move and metadata fields.
         let mut board = fen.split('/').collect::<Vec<&str>>();
-        // split the last element into parts
         let mut parts = board.last().unwrap().split_whitespace();
-        // remove the last element
         board.pop();
-        // get the last row
         let pieces = parts.next().unwrap();
-        // add the pieces to the board
+        // Put the last board row back so all 8 ranks can be processed uniformly.
         board.push(pieces);
 
         let side = match parts.next().unwrap() {
