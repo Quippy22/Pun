@@ -167,5 +167,4 @@ impl MoveGenerator {
 
         (own_bitboard, enemy_bitboard)
     }
-
 }
