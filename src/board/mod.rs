@@ -3,7 +3,7 @@ mod fen;
 pub mod moves;
 
 use crate::board::fen::FenData;
-use crate::utils::string_to_square;
+use crate::board::moves::Move;
 
 /// Side-to-move and color indexing for board bitboards.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -245,20 +245,16 @@ impl Board {
     /// - castling-right updates
     /// - en passant target updates
     /// - halfmove/fullmove clocks
-    pub fn update_state(&mut self, uci_move: &str) {
-        // 1. Parse the UCI move string
-        let from_str = &uci_move[0..2];
-        let to_str = &uci_move[2..4];
-        let promotion = uci_move.as_bytes().get(4).copied().map(char::from);
+    pub fn make_move(&mut self, mv: &Move) {
+        // 1. Extract move data
+        let from_sq = mv.start_pos() as u8;
+        let to_sq = mv.end_pos() as u8;
 
-        // 1.1 Convert the UCI squares to square numbers
-        let from_sq = string_to_square(from_str);
-        let to_sq = string_to_square(to_str);
-        // 1.2 Get the moving piece and the target piece
+        // 1.1 Get the moving piece and the target piece
         let moving_color = self.side_to_move;
         let moving_piece = self
             .piece_at(from_sq)
-            .unwrap_or_else(|| panic!("No piece found on {}", from_str));
+            .unwrap_or_else(|| panic!("No piece found on square {}", from_sq));
         let target_piece = self.piece_at(to_sq);
 
         // 2. Treat en passant specially
@@ -362,15 +358,15 @@ impl Board {
 
         // 4. Treat promotions
         // Promotions replace the pawn with the promoted piece.
-        let piece_to_place = if is_pawn {
-            match promotion {
-                Some('q') => Piece::new(moving_color, PieceType::Queen),
-                Some('r') => Piece::new(moving_color, PieceType::Rook),
-                Some('b') => Piece::new(moving_color, PieceType::Bishop),
-                Some('n') => Piece::new(moving_color, PieceType::Knight),
-                Some(other) => panic!("Invalid promotion piece: {}", other),
-                None => moving_piece,
-            }
+        let piece_to_place = if is_pawn && mv.is_promotion() {
+            let kind = match mv.special_flag() & !0b0001 {
+                0b1000 => PieceType::Queen,
+                0b1010 => PieceType::Rook,
+                0b1100 => PieceType::Bishop,
+                0b1110 => PieceType::Knight,
+                _ => panic!("Invalid promotion flag: {:b}", mv.special_flag()),
+            };
+            Piece::new(moving_color, kind)
         } else {
             moving_piece
         };

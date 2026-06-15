@@ -4,6 +4,7 @@ pub(crate) mod pawn;
 pub(crate) mod sliders;
 
 use crate::board::{Board, Color, Piece, PieceType};
+use crate::utils::string_to_square;
 
 /// Compact move encoding used throughout the engine.
 ///
@@ -79,6 +80,33 @@ impl Move {
             0b1110 => Some('n'),
             _ => None,
         }
+    }
+
+    /// Parses a UCI move string (e.g. "e2e4", "e7e8q") into a Move.
+    pub fn from_uci(uci: &str) -> Self {
+        let from = string_to_square(&uci[0..2]);
+        let to = string_to_square(&uci[2..4]);
+        let promotion = uci.as_bytes().get(4).copied().map(char::from);
+
+        let mut flag: u16 = 0;
+
+        // Set capture flag if there's a piece on the target square
+        // (en passant is handled separately by the board)
+        // We can't know here if it's a capture, so we set it later in make_move.
+        // For from_uci, we encode promotions into the flag.
+
+        if let Some(p) = promotion {
+            let promo_flag = match p {
+                'q' => 0b1000,
+                'r' => 0b1010,
+                'b' => 0b1100,
+                'n' => 0b1110,
+                _ => panic!("Invalid promotion piece: {}", p),
+            };
+            flag |= promo_flag;
+        }
+
+        Move::new(from as u16, to as u16, flag)
     }
 
     /// Formats the move as UCI.
@@ -168,7 +196,7 @@ impl MoveGenerator {
     #[inline(always)]
     fn is_legal(board: &Board, mv: &Move) -> bool {
         let mut updated = board.clone();
-        updated.update_state(&mv.to_uci());
+        updated.make_move(mv);
 
         !Self::is_check(&updated, board.side_to_move)
     }

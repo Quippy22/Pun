@@ -69,7 +69,7 @@ pub fn uci_loop() {
                         move_list.join(", ")
                     );
                     for mv in move_list {
-                        board.update_state(mv);
+                        board.make_move(&Move::from_uci(mv));
                     }
                 } else {
                     println!("info string [position] no moves to apply");
@@ -86,7 +86,7 @@ pub fn uci_loop() {
                 if !moves.is_empty() {
                     println!("info string [go] playing {}", moves[0]);
                     println!("bestmove {}", moves[0].to_uci());
-                    // board.update_state(&moves[0].to_uci());
+                    // board.make_move(&moves[0]);
                 } else {
                     println!("info string [go] no moves found, sending null move");
                     println!("bestmove 0000");
