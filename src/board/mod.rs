@@ -177,6 +177,21 @@ pub struct Board {
     pub half_move_clock: u16,
     /// Full move number.
     pub full_move_clock: u16,
+    /// Saved state for unmake_move.
+    undo: Option<UndoInfo>,
+}
+
+#[derive(Debug, Clone)]
+struct UndoInfo {
+    castling_rights: u8,
+    en_passant_sq: Option<u8>,
+    half_move_clock: u16,
+    full_move_clock: u16,
+    side_to_move: Color,
+    captured_piece: Option<Piece>,
+    captured_sq: Option<u8>,
+    moving_piece: Piece,
+    mv: Move,
 }
 
 impl Board {
@@ -203,6 +218,7 @@ impl Board {
             en_passant_sq: fen_data.en_passant_sq,
             half_move_clock: fen_data.half_move,
             full_move_clock: fen_data.full_move,
+            undo: None,
         }
     }
 
@@ -257,6 +273,19 @@ impl Board {
             .unwrap_or_else(|| panic!("No piece found on square {}", from_sq));
         let target_piece = self.piece_at(to_sq);
 
+        // Save undo info before any state changes
+        self.undo = Some(UndoInfo {
+            castling_rights: self.castling_rights,
+            en_passant_sq: self.en_passant_sq,
+            half_move_clock: self.half_move_clock,
+            full_move_clock: self.full_move_clock,
+            side_to_move: self.side_to_move,
+            captured_piece: None,
+            captured_sq: None,
+            moving_piece,
+            mv: *mv,
+        });
+
         // 2. Treat en passant specially
         let prev_en_passant_sq = self.en_passant_sq;
 
@@ -294,6 +323,12 @@ impl Board {
             };
             captured_piece = self.remove_piece_at(ep_capture_sq);
             captured_sq = Some(ep_capture_sq);
+        }
+
+        // Update undo info with capture details
+        if let Some(ref mut undo) = self.undo {
+            undo.captured_piece = captured_piece;
+            undo.captured_sq = captured_sq;
         }
 
         // Remove the moving piece before any special re-placement.
@@ -394,6 +429,61 @@ impl Board {
         self.refresh_colors();
 
         self.side_to_move = moving_color.opposite();
+    }
+
+    /// Reverses the last make_move.
+    pub fn unmake_move(&mut self) {
+        let undo = self.undo.take().expect("No move to unmake");
+
+        let from_sq = undo.mv.start_pos() as u8;
+        let to_sq = undo.mv.end_pos() as u8;
+
+        // Remove the piece from its destination
+        self.remove_piece_at(to_sq);
+
+        // Place the moving piece back at its origin
+        // If it was a promotion, place the pawn back instead
+        let piece_to_restore = if undo.mv.is_promotion() {
+            Piece::new(undo.side_to_move, PieceType::Pawn)
+        } else {
+            undo.moving_piece
+        };
+        self.place_piece_at(piece_to_restore, from_sq);
+
+        // Restore captured piece
+        if let (Some(piece), Some(sq)) = (undo.captured_piece, undo.captured_sq) {
+            self.place_piece_at(piece, sq);
+        }
+
+        // Reverse castling rook movement
+        match (undo.moving_piece, from_sq, to_sq) {
+            (Piece::WhiteKing, 4, 6) => {
+                self.remove_piece_at(5);
+                self.place_piece_at(Piece::WhiteRook, 7);
+            }
+            (Piece::WhiteKing, 4, 2) => {
+                self.remove_piece_at(3);
+                self.place_piece_at(Piece::WhiteRook, 0);
+            }
+            (Piece::BlackKing, 60, 62) => {
+                self.remove_piece_at(61);
+                self.place_piece_at(Piece::BlackRook, 63);
+            }
+            (Piece::BlackKing, 60, 58) => {
+                self.remove_piece_at(59);
+                self.place_piece_at(Piece::BlackRook, 56);
+            }
+            _ => {}
+        }
+
+        // Restore saved state
+        self.castling_rights = undo.castling_rights;
+        self.en_passant_sq = undo.en_passant_sq;
+        self.half_move_clock = undo.half_move_clock;
+        self.full_move_clock = undo.full_move_clock;
+        self.side_to_move = undo.side_to_move;
+
+        self.refresh_colors();
     }
 
     // -- HELPERS --

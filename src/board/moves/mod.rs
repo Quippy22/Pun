@@ -34,7 +34,7 @@ use crate::utils::string_to_square;
 /// Castles:
 /// 0100 - king side
 /// 0110 - queen side
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Move(pub u16);
 
 impl Move {
@@ -137,7 +137,16 @@ impl MoveGenerator {
     pub fn get_all_moves(board: &Board, color: Color, available_moves: &mut Vec<Move>) {
         let mut pseudo = Vec::new();
         Self::get_all_pseudo_legal_moves(board, color, &mut pseudo);
-        available_moves.extend(pseudo.into_iter().filter(|mv| Self::is_legal(board, mv)));
+
+        let mut working = board.clone();
+        for mv in &pseudo {
+            working.make_move(mv);
+            let legal = !Self::is_check(&working, color);
+            working.unmake_move();
+            if legal {
+                available_moves.push(*mv);
+            }
+        }
     }
     /// Generates all pseudo-legal moves for a side.
     fn get_all_pseudo_legal_moves(board: &Board, color: Color, available_moves: &mut Vec<Move>) {
@@ -190,15 +199,6 @@ impl MoveGenerator {
         };
 
         (own_bitboard, enemy_bitboard)
-    }
-
-    /// Checks if a move is legal
-    #[inline(always)]
-    fn is_legal(board: &Board, mv: &Move) -> bool {
-        let mut updated = board.clone();
-        updated.make_move(mv);
-
-        !Self::is_check(&updated, board.side_to_move)
     }
 
     /// Checks if the king of the given color is in check on the current board.
