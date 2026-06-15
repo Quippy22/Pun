@@ -3,7 +3,7 @@ pub(crate) mod knight;
 pub(crate) mod pawn;
 pub(crate) mod sliders;
 
-use crate::board::{Board, Color, Piece};
+use crate::board::{Board, Color, Piece, PieceType};
 
 /// Compact move encoding used throughout the engine.
 ///
@@ -113,8 +113,9 @@ impl MoveGenerator {
     }
     /// Generates all pseudo-legal moves for a side.
     fn get_all_pseudo_legal_moves(board: &Board, color: Color, available_moves: &mut Vec<Move>) {
-        for piece in Piece::all() {
-            if piece.color() == color && board.pieces[piece as usize] != 0 {
+        for kind in PieceType::all() {
+            let piece = Piece::new(color, kind);
+            if board.pieces[piece as usize] != 0 {
                 Self::get_possible_moves(board, piece, available_moves);
             }
         }
@@ -122,25 +123,13 @@ impl MoveGenerator {
 
     /// Generates all pseudo-legal moves for a single piece type.
     fn get_possible_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
-        match piece {
-            Piece::WhitePawn | Piece::BlackPawn => {
-                Self::get_all_pawn_moves(board, piece, available_moves)
-            }
-            Piece::WhiteKnight | Piece::BlackKnight => {
-                Self::get_all_knight_moves(board, piece, available_moves)
-            }
-            Piece::WhiteBishop | Piece::BlackBishop => {
-                Self::get_all_bishop_moves(board, piece, available_moves)
-            }
-            Piece::WhiteRook | Piece::BlackRook => {
-                Self::get_all_rook_moves(board, piece, available_moves)
-            }
-            Piece::WhiteQueen | Piece::BlackQueen => {
-                Self::get_all_queen_moves(board, piece, available_moves)
-            }
-            Piece::WhiteKing | Piece::BlackKing => {
-                Self::get_all_king_moves(board, piece, available_moves)
-            }
+        match piece.kind() {
+            PieceType::Pawn => Self::get_all_pawn_moves(board, piece, available_moves),
+            PieceType::Knight => Self::get_all_knight_moves(board, piece, available_moves),
+            PieceType::Bishop => Self::get_all_bishop_moves(board, piece, available_moves),
+            PieceType::Rook => Self::get_all_rook_moves(board, piece, available_moves),
+            PieceType::Queen => Self::get_all_queen_moves(board, piece, available_moves),
+            PieceType::King => Self::get_all_king_moves(board, piece, available_moves),
         }
     }
 
@@ -196,88 +185,54 @@ impl MoveGenerator {
     ///   - If any capture lands on an enemy of the same type → king is in check
     ///
     /// This works because attack rays are symmetric: if piece X on square A
-    /// can reach square B, then piece X on square B can reach square A.    #[inline(always)]
+    /// can reach square B, then piece X on square B can reach square A.
+    #[inline(always)]
     fn is_check(board: &Board, color: Color) -> bool {
-        // Keep the pieces in a list,
-        // go through them in order,
-        // check if the enemies of the same type can attact the king
-        //
-        // Order of pieces:
-        // Queen, Bishop, Rook, Knight, King
-        let pieces: [Piece; 6] = match color {
-            Color::White => [
-                Piece::WhiteQueen,
-                Piece::WhiteBishop,
-                Piece::WhiteRook,
-                Piece::WhiteKnight,
-                Piece::WhitePawn,
-                Piece::WhiteKing,
-            ],
-            Color::Black => [
-                Piece::BlackQueen,
-                Piece::BlackBishop,
-                Piece::BlackRook,
-                Piece::BlackKnight,
-                Piece::BlackPawn,
-                Piece::BlackKing,
-            ],
-        };
-
-        // store the piece bitboard for the king
-        let piece_bb = board.pieces[pieces[5] as usize];
+        let king = Piece::new(color, PieceType::King);
+        let king_bb = board.pieces[king as usize];
         let mut moves: Vec<Move> = Vec::new();
 
-        type MoveGen = fn(&Board, Piece, &mut Vec<Move>);
-        let generators: [(usize, MoveGen); 6] = [
-            (0, Self::get_all_queen_moves),
-            (1, Self::get_all_bishop_moves),
-            (2, Self::get_all_rook_moves),
-            (3, Self::get_all_knight_moves),
-            (4, Self::get_all_pawn_moves),
-            (5, Self::get_all_king_moves),
-        ];
+        // Iterate over all piece types
+        for kind in PieceType::all() {
+            // Store the piece and its enemy
+            let piece = Piece::new(color, kind);
+            let enemy = piece.opposite();
 
-        let pawns = board.pieces[pieces[4] as usize];
-
-        for (piece_idx, generator) in generators {
-            // create a virtual board
+            // Build virtual board: put king as virtual piece, clear king
             let mut virtual_board = board.clone();
-            // preserce the pieces as obstacles (pawns)
-            virtual_board.pieces[pieces[4] as usize] |=
-                pawns | board.pieces[pieces[piece_idx] as usize];
-            // replace the king with a virtual piece
-            virtual_board.pieces[pieces[piece_idx] as usize] = piece_bb;
-            // clear the king bitboard
-            if piece_idx != 5 {
-                // don't cear the king bitboard
-                virtual_board.pieces[pieces[5] as usize] = 0;
+            // Preserve original piece bits as obstacles in the pawn bitboard
+            let pawn = Piece::new(color, PieceType::Pawn);
+            let original_piece_bb = virtual_board.pieces[piece as usize];
+            virtual_board.pieces[pawn as usize] |= original_piece_bb;
+            virtual_board.pieces[piece as usize] = king_bb;
+            if kind != PieceType::King {
+                virtual_board.pieces[king as usize] = 0;
             }
-            // refresh the board state
             virtual_board.refresh_colors();
 
-            // generate all the possible moves for the virtual piece
-            generator(&virtual_board, pieces[piece_idx], &mut moves);
+            // Dispatch generator for this piece type
+            match kind {
+                PieceType::Queen => Self::get_all_queen_moves(&virtual_board, piece, &mut moves),
+                PieceType::Bishop => Self::get_all_bishop_moves(&virtual_board, piece, &mut moves),
+                PieceType::Rook => Self::get_all_rook_moves(&virtual_board, piece, &mut moves),
+                PieceType::Knight => Self::get_all_knight_moves(&virtual_board, piece, &mut moves),
+                PieceType::Pawn => Self::get_all_pawn_moves(&virtual_board, piece, &mut moves),
+                PieceType::King => Self::get_all_king_moves(&virtual_board, piece, &mut moves),
+            }
 
-            // check if any of the moves capture an enemy piece of the same type
-            // if so, the king is in check
-            if moves.iter().any(|mv| {
-                if !mv.is_capture() {
-                    return false;
-                }
-                if let Some(p) = board.piece_at(mv.end_pos() as u8) {
-                    p == pieces[piece_idx].opposite()
-                } else {
-                    false
-                }
-            }) {
+            // Check if any capture lands on an enemy of the same type
+            if moves
+                .iter()
+                .any(|mv| mv.is_capture() && board.piece_at(mv.end_pos() as u8) == Some(enemy))
+            {
                 return true;
             }
 
-            // clear the moves list for the next iteration
+            // Clear the moves list for the next iteration
             moves.clear();
         }
 
-        // if this point has been reached,
+        // If this point has been reached,
         // the king is safe
         false
     }

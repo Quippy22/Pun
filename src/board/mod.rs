@@ -13,6 +13,53 @@ pub enum Color {
     /// Black side.
     Black,
 }
+
+impl Color {
+    /// Returns the opposite color.
+    pub fn opposite(&self) -> Self {
+        match self {
+            Color::White => Color::Black,
+            Color::Black => Color::White,
+        }
+    }
+}
+
+/// The type of piece, independent of color.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PieceType {
+    Pawn,
+    Knight,
+    Bishop,
+    Rook,
+    Queen,
+    King,
+}
+
+impl PieceType {
+    pub fn all() -> impl Iterator<Item = Self> {
+        [
+            Self::Pawn,
+            Self::Knight,
+            Self::Bishop,
+            Self::Rook,
+            Self::Queen,
+            Self::King,
+        ]
+        .into_iter()
+    }
+
+    pub fn value(&self) -> i32 {
+        match self {
+            PieceType::Pawn => 100,
+            PieceType::Knight => 320,
+            PieceType::Bishop => 330,
+            PieceType::Rook => 500,
+            PieceType::Queen => 900,
+            PieceType::King => 20000,
+        }
+    }
+}
+
 /// Piece identifiers and their backing bitboard indices.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Piece {
@@ -43,6 +90,24 @@ pub enum Piece {
 }
 
 impl Piece {
+    /// Constructs a `Piece` from a color and piece type.
+    pub fn new(color: Color, kind: PieceType) -> Self {
+        match (color, kind) {
+            (Color::White, PieceType::Pawn) => Piece::WhitePawn,
+            (Color::White, PieceType::Knight) => Piece::WhiteKnight,
+            (Color::White, PieceType::Bishop) => Piece::WhiteBishop,
+            (Color::White, PieceType::Rook) => Piece::WhiteRook,
+            (Color::White, PieceType::Queen) => Piece::WhiteQueen,
+            (Color::White, PieceType::King) => Piece::WhiteKing,
+            (Color::Black, PieceType::Pawn) => Piece::BlackPawn,
+            (Color::Black, PieceType::Knight) => Piece::BlackKnight,
+            (Color::Black, PieceType::Bishop) => Piece::BlackBishop,
+            (Color::Black, PieceType::Rook) => Piece::BlackRook,
+            (Color::Black, PieceType::Queen) => Piece::BlackQueen,
+            (Color::Black, PieceType::King) => Piece::BlackKing,
+        }
+    }
+
     /// Returns every piece enum value in board storage order.
     pub fn all() -> impl Iterator<Item = Self> {
         [
@@ -71,20 +136,21 @@ impl Piece {
         }
     }
 
+    /// Returns the piece of the opposite color with the same kind.
     pub fn opposite(&self) -> Self {
+        // achives that by creating a new piece with the opposite color and the same kind
+        Piece::new(self.color().opposite(), self.kind())
+    }
+
+    /// Returns the type of piece regardless of color
+    pub fn kind(&self) -> PieceType {
         match self {
-            Piece::WhitePawn => Piece::BlackPawn,
-            Piece::WhiteKnight => Piece::BlackKnight,
-            Piece::WhiteBishop => Piece::BlackBishop,
-            Piece::WhiteRook => Piece::BlackRook,
-            Piece::WhiteQueen => Piece::BlackQueen,
-            Piece::WhiteKing => Piece::BlackKing,
-            Piece::BlackPawn => Piece::WhitePawn,
-            Piece::BlackKnight => Piece::WhiteKnight,
-            Piece::BlackBishop => Piece::WhiteBishop,
-            Piece::BlackRook => Piece::WhiteRook,
-            Piece::BlackQueen => Piece::WhiteQueen,
-            Piece::BlackKing => Piece::WhiteKing,
+            Piece::WhitePawn | Piece::BlackPawn => PieceType::Pawn,
+            Piece::WhiteKnight | Piece::BlackKnight => PieceType::Knight,
+            Piece::WhiteBishop | Piece::BlackBishop => PieceType::Bishop,
+            Piece::WhiteRook | Piece::BlackRook => PieceType::Rook,
+            Piece::WhiteQueen | Piece::BlackQueen => PieceType::Queen,
+            Piece::WhiteKing | Piece::BlackKing => PieceType::King,
         }
     }
 }
@@ -198,7 +264,7 @@ impl Board {
         // 2. Treat en passant specially
         let prev_en_passant_sq = self.en_passant_sq;
 
-        let is_pawn = matches!(moving_piece, Piece::WhitePawn | Piece::BlackPawn);
+        let is_pawn = moving_piece.kind() == PieceType::Pawn;
 
         // En passant only lasts for the immediately following move.
         self.en_passant_sq = None;
@@ -252,22 +318,23 @@ impl Board {
 
         // 3. Treat castling rights
         // Capturing a rook on its home square removes the corresponding right.
-        if let Some(Piece::WhiteRook | Piece::BlackRook) = captured_piece
+        if captured_piece.is_some_and(|p| p.kind() == PieceType::Rook)
             && let Some(square) = captured_sq
         {
             self.clear_castling_rights_for_rook_square(square);
         }
 
         // Moving a king or rook also removes castling rights.
-        match moving_piece {
-            Piece::WhiteKing => {
-                self.castling_rights &= !(Self::WHITE_KINGSIDE | Self::WHITE_QUEENSIDE)
+        match moving_piece.kind() {
+            PieceType::King => {
+                if moving_color == Color::White {
+                    self.castling_rights &= !(Self::WHITE_KINGSIDE | Self::WHITE_QUEENSIDE);
+                } else {
+                    self.castling_rights &= !(Self::BLACK_KINGSIDE | Self::BLACK_QUEENSIDE);
+                }
             }
-            Piece::BlackKing => {
-                self.castling_rights &= !(Self::BLACK_KINGSIDE | Self::BLACK_QUEENSIDE)
-            }
-            Piece::WhiteRook | Piece::BlackRook => {
-                self.clear_castling_rights_for_rook_square(from_sq)
+            PieceType::Rook => {
+                self.clear_castling_rights_for_rook_square(from_sq);
             }
             _ => {}
         }
@@ -297,22 +364,10 @@ impl Board {
         // Promotions replace the pawn with the promoted piece.
         let piece_to_place = if is_pawn {
             match promotion {
-                Some('q') => match moving_color {
-                    Color::White => Piece::WhiteQueen,
-                    Color::Black => Piece::BlackQueen,
-                },
-                Some('r') => match moving_color {
-                    Color::White => Piece::WhiteRook,
-                    Color::Black => Piece::BlackRook,
-                },
-                Some('b') => match moving_color {
-                    Color::White => Piece::WhiteBishop,
-                    Color::Black => Piece::BlackBishop,
-                },
-                Some('n') => match moving_color {
-                    Color::White => Piece::WhiteKnight,
-                    Color::Black => Piece::BlackKnight,
-                },
+                Some('q') => Piece::new(moving_color, PieceType::Queen),
+                Some('r') => Piece::new(moving_color, PieceType::Rook),
+                Some('b') => Piece::new(moving_color, PieceType::Bishop),
+                Some('n') => Piece::new(moving_color, PieceType::Knight),
                 Some(other) => panic!("Invalid promotion piece: {}", other),
                 None => moving_piece,
             }
@@ -342,10 +397,7 @@ impl Board {
         // Refresh cached occupancy and swap the side to move.
         self.refresh_colors();
 
-        self.side_to_move = match moving_color {
-            Color::White => Color::Black,
-            Color::Black => Color::White,
-        };
+        self.side_to_move = moving_color.opposite();
     }
 
     // -- HELPERS --

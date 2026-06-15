@@ -55,12 +55,6 @@ impl MoveGenerator {
 
             // Left capture means "toward the A-file" from White's perspective.
             if file != 0 && (pawn << 7) & enemy_pieces != 0 {
-                available_moves.push(match color {
-                    Color::White => Move::new(index, index + 7, flag),
-                    Color::Black => Move::new(index ^ 56, (index ^ 56) - 9, flag),
-                });
-
-                // Promotion captures are emitted as separate moves too.
                 if is_promotion {
                     for p in PROMOTIONS.iter() {
                         available_moves.push(match color {
@@ -68,17 +62,16 @@ impl MoveGenerator {
                             Color::Black => Move::new(index ^ 56, (index ^ 56) - 9, flag | p),
                         });
                     }
+                } else {
+                    available_moves.push(match color {
+                        Color::White => Move::new(index, index + 7, flag),
+                        Color::Black => Move::new(index ^ 56, (index ^ 56) - 9, flag),
+                    });
                 }
             }
 
             // Right capture means "toward the H-file" from White's perspective.
             if file != 7 && (pawn << 9) & enemy_pieces != 0 {
-                available_moves.push(match color {
-                    Color::White => Move::new(index, index + 9, flag),
-                    Color::Black => Move::new(index ^ 56, (index ^ 56) - 7, flag),
-                });
-
-                // Promotion captures are emitted as separate moves too.
                 if is_promotion {
                     for p in PROMOTIONS.iter() {
                         available_moves.push(match color {
@@ -86,6 +79,11 @@ impl MoveGenerator {
                             Color::Black => Move::new(index ^ 56, (index ^ 56) - 7, flag | p),
                         });
                     }
+                } else {
+                    available_moves.push(match color {
+                        Color::White => Move::new(index, index + 9, flag),
+                        Color::Black => Move::new(index ^ 56, (index ^ 56) - 7, flag),
+                    });
                 }
             }
 
