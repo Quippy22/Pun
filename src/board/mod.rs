@@ -71,7 +71,7 @@ impl Piece {
         }
     }
 
-    pub fn oposite(&self) -> Self {
+    pub fn opposite(&self) -> Self {
         match self {
             Piece::WhitePawn => Piece::BlackPawn,
             Piece::WhiteKnight => Piece::BlackKnight,

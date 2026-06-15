@@ -108,11 +108,11 @@ impl MoveGenerator {
     /// Filters out the illegal moves
     pub fn get_all_moves(board: &Board, color: Color, available_moves: &mut Vec<Move>) {
         let mut pseudo = Vec::new();
-        Self::get_all_preudo_legal_moves(board, color, &mut pseudo);
+        Self::get_all_pseudo_legal_moves(board, color, &mut pseudo);
         available_moves.extend(pseudo.into_iter().filter(|mv| Self::is_legal(board, mv)));
     }
     /// Generates all pseudo-legal moves for a side.
-    fn get_all_preudo_legal_moves(board: &Board, color: Color, available_moves: &mut Vec<Move>) {
+    fn get_all_pseudo_legal_moves(board: &Board, color: Color, available_moves: &mut Vec<Move>) {
         for piece in Piece::all() {
             if piece.color() == color && board.pieces[piece as usize] != 0 {
                 Self::get_possible_moves(board, piece, available_moves);
@@ -187,81 +187,94 @@ impl MoveGenerator {
     /// Checks if the king of the given color is in check on the current board.
     ///
     /// Uses the "reverse attack" technique: instead of generating all enemy moves
-    /// and checking if any land on the king, we place a virtual queen and a virtual
-    /// knight on the king's square and generate their captures.
+    /// and checking if any land on the king, we place a virtual piece of each type
+    /// on the king's square and generate its captures.
     ///
-    /// - If the virtual queen can capture an enemy rook, bishop, or queen → in check
-    /// - If the virtual knight can capture an enemy knight → in check
-    /// - Pawn attacks are checked separately due to their directional nature
+    /// For each piece type (queen, bishop, rook, knight, pawn, king):
+    ///   - Place a virtual piece of that type on the king's square
+    ///   - Generate its moves
+    ///   - If any capture lands on an enemy of the same type → king is in check
     ///
-    /// This works because attack rays are symmetric: if a queen on square A can
-    /// reach square B, then a queen on square B can reach square A.
-    #[inline(always)]
+    /// This works because attack rays are symmetric: if piece X on square A
+    /// can reach square B, then piece X on square B can reach square A.    #[inline(always)]
     fn is_check(board: &Board, color: Color) -> bool {
-        let (king_piece, queen_piece, knight_piece) = match color {
-            Color::White => (Piece::WhiteKing, Piece::WhiteQueen, Piece::WhiteKnight),
-            Color::Black => (Piece::BlackKing, Piece::BlackQueen, Piece::BlackKnight),
-        };
-        let enemy_sliders: [Piece; 4] = match color {
+        // Keep the pieces in a list,
+        // go through them in order,
+        // check if the enemies of the same type can attact the king
+        //
+        // Order of pieces:
+        // Queen, Bishop, Rook, Knight, King
+        let pieces: [Piece; 6] = match color {
             Color::White => [
-                Piece::BlackKing,
-                Piece::BlackQueen,
-                Piece::BlackBishop,
-                Piece::BlackRook,
-            ],
-            Color::Black => [
-                Piece::WhiteKing,
                 Piece::WhiteQueen,
                 Piece::WhiteBishop,
                 Piece::WhiteRook,
+                Piece::WhiteKnight,
+                Piece::WhitePawn,
+                Piece::WhiteKing,
+            ],
+            Color::Black => [
+                Piece::BlackQueen,
+                Piece::BlackBishop,
+                Piece::BlackRook,
+                Piece::BlackKnight,
+                Piece::BlackPawn,
+                Piece::BlackKing,
             ],
         };
-        let enemy_knight: Piece = match color {
-            Color::White => Piece::BlackKnight,
-            Color::Black => Piece::WhiteKnight,
-        };
-        let piece_bb = board.pieces[king_piece as usize];
+
+        // store the piece bitboard for the king
+        let piece_bb = board.pieces[pieces[5] as usize];
         let mut moves: Vec<Move> = Vec::new();
 
-        // 1. replace the king with a virtual queen
-        let mut queen = board.clone();
-        queen.pieces[queen_piece as usize] = piece_bb;
-        queen.pieces[king_piece as usize] = 0;
-        queen.refresh_colors();
+        type MoveGen = fn(&Board, Piece, &mut Vec<Move>);
+        let generators: [(usize, MoveGen); 6] = [
+            (0, Self::get_all_queen_moves),
+            (1, Self::get_all_bishop_moves),
+            (2, Self::get_all_rook_moves),
+            (3, Self::get_all_knight_moves),
+            (4, Self::get_all_pawn_moves),
+            (5, Self::get_all_king_moves),
+        ];
 
-        Self::get_all_queen_moves(&queen, queen_piece, &mut moves);
+        let pawns = board.pieces[pieces[4] as usize];
 
-        if moves.iter().any(|mv| {
-            if !mv.is_capture() {
-                return false;
+        for (piece_idx, generator) in generators {
+            // create a virtual board
+            let mut virtual_board = board.clone();
+            // preserce the pieces as obstacles (pawns)
+            virtual_board.pieces[pieces[4] as usize] |=
+                pawns | board.pieces[pieces[piece_idx] as usize];
+            // replace the king with a virtual piece
+            virtual_board.pieces[pieces[piece_idx] as usize] = piece_bb;
+            // clear the king bitboard
+            if piece_idx != 5 {
+                // don't cear the king bitboard
+                virtual_board.pieces[pieces[5] as usize] = 0;
             }
-            if let Some(p) = board.piece_at(mv.end_pos() as u8) {
-                enemy_sliders.contains(&p)
-            } else {
-                false
+            // refresh the board state
+            virtual_board.refresh_colors();
+
+            // generate all the possible moves for the virtual piece
+            generator(&virtual_board, pieces[piece_idx], &mut moves);
+
+            // check if any of the moves capture an enemy piece of the same type
+            // if so, the king is in check
+            if moves.iter().any(|mv| {
+                if !mv.is_capture() {
+                    return false;
+                }
+                if let Some(p) = board.piece_at(mv.end_pos() as u8) {
+                    p == pieces[piece_idx].opposite()
+                } else {
+                    false
+                }
+            }) {
+                return true;
             }
-        }) {
-            return true;
-        }
 
-        moves.clear();
-
-        // 2. replace the king with a virtual knight
-        let mut knight = board.clone();
-        knight.pieces[knight_piece as usize] = piece_bb;
-        knight.pieces[king_piece as usize] = 0;
-        knight.refresh_colors();
-
-        Self::get_all_knight_moves(&knight, knight_piece, &mut moves);
-
-        if moves.iter().any(|mv| {
-            if !mv.is_capture() {
-                false
-            } else {
-                matches!(board.piece_at(mv.end_pos() as u8), Some(p) if p == enemy_knight)
-            }
-        }) {
-            return true;
+            // clear the moves list for the next iteration
+            moves.clear();
         }
 
         // if this point has been reached,
@@ -360,7 +373,7 @@ mod tests {
             #[test]
             fn test_black_king_in_check_by_rook_on_same_file() {
                 // white rook e1, black king e8
-                assert!(is_check("4k3/8/8/8/8/8/8/4KR2 w - - 0 1", Color::Black));
+                assert!(is_check("4k3/8/8/8/8/8/8/4RK2 w - - 0 1", Color::Black));
             }
         }
 
@@ -430,7 +443,7 @@ mod tests {
             fn test_white_king_exposed_after_pawn_gap() {
                 // gap on e2, black rook on e8 reaches king on e1
                 assert!(is_check(
-                    "3rk3/8/8/8/8/8/PPPP1PPP/4K3 w - - 0 1",
+                    "4rk3/8/8/8/8/8/PPPP1PPP/4K3 w - - 0 1",
                     Color::White
                 ));
             }
