@@ -70,6 +70,23 @@ impl Piece {
             Color::Black
         }
     }
+
+    pub fn oposite(&self) -> Self {
+        match self {
+            Piece::WhitePawn => Piece::BlackPawn,
+            Piece::WhiteKnight => Piece::BlackKnight,
+            Piece::WhiteBishop => Piece::BlackBishop,
+            Piece::WhiteRook => Piece::BlackRook,
+            Piece::WhiteQueen => Piece::BlackQueen,
+            Piece::WhiteKing => Piece::BlackKing,
+            Piece::BlackPawn => Piece::WhitePawn,
+            Piece::BlackKnight => Piece::WhiteKnight,
+            Piece::BlackBishop => Piece::WhiteBishop,
+            Piece::BlackRook => Piece::WhiteRook,
+            Piece::BlackQueen => Piece::WhiteQueen,
+            Piece::BlackKing => Piece::WhiteKing,
+        }
+    }
 }
 
 /// Complete board state tracked by the engine.
