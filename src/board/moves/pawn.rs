@@ -87,8 +87,35 @@ impl MoveGenerator {
                 }
             }
 
-            // En passant is wired later once the move legality layer exists.
-            // TODO: implement en passant check
+            // En passant: the enemy pawn just double-pushed and landed next to us.
+            if let Some(ep_sq) = board.en_passant_sq {
+                let ep_sq = ep_sq as u16;
+                let ep_target = match color {
+                    Color::White => {
+                        if index / 8 == 4 && file != 0 && ep_sq == index + 7 {
+                            Some((index, index + 7))
+                        } else if index / 8 == 4 && file != 7 && ep_sq == index + 9 {
+                            Some((index, index + 9))
+                        } else {
+                            None
+                        }
+                    }
+                    Color::Black => {
+                        let raw = index ^ 56;
+                        if raw / 8 == 3 && file != 0 && ep_sq == raw - 9 {
+                            Some((raw, raw - 9))
+                        } else if raw / 8 == 3 && file != 7 && ep_sq == raw - 7 {
+                            Some((raw, raw - 7))
+                        } else {
+                            None
+                        }
+                    }
+                };
+
+                if let Some((from, to)) = ep_target {
+                    available_moves.push(Move::new(from, to, 0b0011));
+                }
+            }
 
             // clear the bit
             pieces &= pieces - 1;
@@ -332,6 +359,66 @@ mod tests {
             assert!(has_move(&moves, "e2f1r"));
             assert!(has_move(&moves, "e2f1b"));
             assert!(has_move(&moves, "e2f1n"));
+        }
+    }
+
+    mod en_passant {
+        use super::*;
+
+        #[test]
+        fn test_white_pawn_en_passant_left() {
+            // White pawn e5, black pawn just double-pushed to d5, en passant target d6
+            let moves = get_moves("8/8/8/3pP3/8/8/8/8 w - d6 0 1", Piece::WhitePawn);
+            assert!(has_move(&moves, "e5d6"));
+        }
+
+        #[test]
+        fn test_white_pawn_en_passant_right() {
+            // White pawn e5, black pawn just double-pushed to f5, en passant target f6
+            let moves = get_moves("8/8/8/4Pp2/8/8/8/8 w - f6 0 1", Piece::WhitePawn);
+            assert!(has_move(&moves, "e5f6"));
+        }
+
+        #[test]
+        fn test_white_pawn_no_en_passant_without_target() {
+            // No en passant square set
+            let moves = get_moves("8/8/8/3pP3/8/8/8/8 w - - 0 1", Piece::WhitePawn);
+            assert!(!has_move(&moves, "e5d6"));
+        }
+
+        #[test]
+        fn test_white_pawn_no_en_passant_wrong_rank() {
+            // White pawn on rank 4, en passant target on rank 6 — too far
+            let moves = get_moves("8/8/8/8/3Pp3/8/8/8 w - f3 0 1", Piece::WhitePawn);
+            assert!(!has_move(&moves, "d4f3"));
+        }
+
+        #[test]
+        fn test_white_pawn_no_en_passant_own_file() {
+            // White pawn e5, en passant on e6 — same file, not diagonal
+            let moves = get_moves("8/8/8/4p3/4P3/8/8/8 w - e6 0 1", Piece::WhitePawn);
+            assert!(!has_move(&moves, "e5e6"));
+        }
+
+        #[test]
+        fn test_black_pawn_en_passant_left() {
+            // Black pawn d4, white pawn just double-pushed to e4, en passant target e3
+            let moves = get_moves("8/8/8/8/3pP3/8/8/8 b - e3 0 1", Piece::BlackPawn);
+            assert!(has_move(&moves, "d4e3"));
+        }
+
+        #[test]
+        fn test_black_pawn_en_passant_right() {
+            // Black pawn d4, white pawn just double-pushed to c4, en passant target c3
+            let moves = get_moves("8/8/8/8/2Pp4/8/8/8 b - c3 0 1", Piece::BlackPawn);
+            assert!(has_move(&moves, "d4c3"));
+        }
+
+        #[test]
+        fn test_black_pawn_no_en_passant_without_target() {
+            // No en passant square set
+            let moves = get_moves("8/8/8/8/3pP3/8/8/8 b - - 0 1", Piece::BlackPawn);
+            assert!(!has_move(&moves, "d4e3"));
         }
     }
 }

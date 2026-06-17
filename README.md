@@ -21,7 +21,7 @@ The project is intentionally built in small steps so each subsystem can be teste
 - [x] UCI-style command loop
 - [x] Legal move generation
 - [x] Castling
-- [ ] En passant
+- [x] En passant
 - [x] Make/unmake move support
 - [ ] Perft testing
 - [ ] Search
