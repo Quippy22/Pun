@@ -3,8 +3,12 @@ use super::*;
 /// The 8 possible king moves as bit shifts.
 const KING_MOVES: [i16; 8] = [-9, -8, -7, -1, 1, 7, 8, 9];
 
+/// Squares the king passes through for castling, relative to king.
+/// [0..2] = kingside (f, g), [2..5] = queenside (d, c, b).
+const CASTLING_CHECKS: [i16; 5] = [1, 2, -1, -2, -3];
+
 impl MoveGenerator {
-    /// Generates all pseudo-legal king moves for one side.
+    /// Generates all pseudo-legal king moves for one side, including castling.
     #[inline(always)]
     pub(super) fn get_all_king_moves(board: &Board, piece: Piece, available_moves: &mut Vec<Move>) {
         let (pieces, color) = Self::get_bitboard(board, piece);
@@ -47,7 +51,73 @@ impl MoveGenerator {
             });
         }
 
-        // TODO: check for castling
+        // Castling
+        let home_rank = match color {
+            Color::White => 0,
+            Color::Black => 7,
+        };
+
+        if index % 8 == 4 && index / 8 == home_rank && board.castling_rights != 0 {
+            let king_sq = Piece::new(color, PieceType::King);
+            let king_bb = board.pieces[king_sq as usize];
+
+            // King must not be in check
+            let mut moves = Vec::new();
+            if Self::is_check(board, color, king_bb, &mut moves) {
+                return;
+            }
+
+            let (ks_bit, qs_bit) = match color {
+                Color::White => (Board::WHITE_KINGSIDE, Board::WHITE_QUEENSIDE),
+                Color::Black => (Board::BLACK_KINGSIDE, Board::BLACK_QUEENSIDE),
+            };
+
+            // Kingside castling
+            if board.castling_rights & ks_bit != 0 {
+                let rook_bb = board.pieces[Piece::new(color, PieceType::Rook) as usize];
+                if rook_bb & (1 << (home_rank * 8 + 7)) != 0 {
+                    let mut safe = true;
+                    for shift in &CASTLING_CHECKS[0..2] {
+                        let sq_bb = (king_bb as i64).wrapping_shl(*shift as u32) as u64;
+                        if sq_bb & (own_pieces | enemy_pieces) != 0
+                            || Self::is_check(board, color, sq_bb, &mut moves)
+                        {
+                            safe = false;
+                            break;
+                        }
+                    }
+                    if safe {
+                        available_moves.push(match color {
+                            Color::White => Move::new(index, index + 2, 0b0100),
+                            Color::Black => Move::new(index ^ 56, (index + 2) ^ 56, 0b0100),
+                        });
+                    }
+                }
+            }
+
+            // Queenside castling
+            if board.castling_rights & qs_bit != 0 {
+                let rook_bb = board.pieces[Piece::new(color, PieceType::Rook) as usize];
+                if rook_bb & (1 << (home_rank * 8)) != 0 {
+                    let mut safe = true;
+                    for shift in &CASTLING_CHECKS[2..5] {
+                        let sq_bb = (king_bb as i64).wrapping_shl(*shift as u32) as u64;
+                        if sq_bb & (own_pieces | enemy_pieces) != 0
+                            || Self::is_check(board, color, sq_bb, &mut moves)
+                        {
+                            safe = false;
+                            break;
+                        }
+                    }
+                    if safe {
+                        available_moves.push(match color {
+                            Color::White => Move::new(index, index - 2, 0b0110),
+                            Color::Black => Move::new(index ^ 56, (index - 2) ^ 56, 0b0110),
+                        });
+                    }
+                }
+            }
+        }
     }
 }
 

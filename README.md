@@ -20,9 +20,9 @@ The project is intentionally built in small steps so each subsystem can be teste
 - [x] Pseudo-legal move generation
 - [x] UCI-style command loop
 - [x] Legal move generation
-- [ ] Castling
+- [x] Castling
 - [ ] En passant
-- [ ] Make/unmake move support
+- [x] Make/unmake move support
 - [ ] Perft testing
 - [ ] Search
 - [ ] Evaluation

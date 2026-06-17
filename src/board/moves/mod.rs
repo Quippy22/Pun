@@ -138,10 +138,14 @@ impl MoveGenerator {
         let mut pseudo = Vec::new();
         Self::get_all_pseudo_legal_moves(board, color, &mut pseudo);
 
+        let king = Piece::new(color, PieceType::King);
+        let mut moves = Vec::new();
+
         let mut working = board.clone();
         for mv in &pseudo {
             working.make_move(mv);
-            let legal = !Self::is_check(&working, color);
+            let king_bb = working.pieces[king as usize];
+            let legal = !Self::is_check(&working, color, king_bb, &mut moves);
             working.unmake_move();
             if legal {
                 available_moves.push(*mv);
@@ -201,51 +205,49 @@ impl MoveGenerator {
         (own_bitboard, enemy_bitboard)
     }
 
-    /// Checks if the king of the given color is in check on the current board.
+    /// Checks if the given square (represented as a single-bit bitboard) is attacked.
     ///
     /// Uses the "reverse attack" technique: instead of generating all enemy moves
-    /// and checking if any land on the king, we place a virtual piece of each type
-    /// on the king's square and generate its captures.
+    /// and checking if any land on the target, we place a virtual piece of each type
+    /// on the target square and generate its captures.
     ///
     /// For each piece type (queen, bishop, rook, knight, pawn, king):
-    ///   - Place a virtual piece of that type on the king's square
+    ///   - Place a virtual piece of that type on the target square
     ///   - Generate its moves
-    ///   - If any capture lands on an enemy of the same type → king is in check
+    ///   - If any capture lands on an enemy of the same type → square is attacked
     ///
     /// This works because attack rays are symmetric: if piece X on square A
     /// can reach square B, then piece X on square B can reach square A.
     #[inline(always)]
-    fn is_check(board: &Board, color: Color) -> bool {
-        let king = Piece::new(color, PieceType::King);
-        let king_bb = board.pieces[king as usize];
-        let mut moves: Vec<Move> = Vec::new();
-
+    fn is_check(board: &Board, color: Color, target_bb: u64, moves: &mut Vec<Move>) -> bool {
         // Iterate over all piece types
         for kind in PieceType::all() {
             // Store the piece and its enemy
             let piece = Piece::new(color, kind);
             let enemy = piece.opposite();
 
-            // Build virtual board: put king as virtual piece, clear king
+            // Build virtual board: put target as virtual piece, clear original
             let mut virtual_board = board.clone();
             // Preserve original piece bits as obstacles in the pawn bitboard
             let pawn = Piece::new(color, PieceType::Pawn);
             let original_piece_bb = virtual_board.pieces[piece as usize];
             virtual_board.pieces[pawn as usize] |= original_piece_bb;
-            virtual_board.pieces[piece as usize] = king_bb;
+            virtual_board.pieces[piece as usize] = target_bb;
             if kind != PieceType::King {
+                let king = Piece::new(color, PieceType::King);
                 virtual_board.pieces[king as usize] = 0;
             }
+            virtual_board.castling_rights = 0;
             virtual_board.refresh_colors();
 
             // Dispatch generator for this piece type
             match kind {
-                PieceType::Queen => Self::get_all_queen_moves(&virtual_board, piece, &mut moves),
-                PieceType::Bishop => Self::get_all_bishop_moves(&virtual_board, piece, &mut moves),
-                PieceType::Rook => Self::get_all_rook_moves(&virtual_board, piece, &mut moves),
-                PieceType::Knight => Self::get_all_knight_moves(&virtual_board, piece, &mut moves),
-                PieceType::Pawn => Self::get_all_pawn_moves(&virtual_board, piece, &mut moves),
-                PieceType::King => Self::get_all_king_moves(&virtual_board, piece, &mut moves),
+                PieceType::Queen => Self::get_all_queen_moves(&virtual_board, piece, moves),
+                PieceType::Bishop => Self::get_all_bishop_moves(&virtual_board, piece, moves),
+                PieceType::Rook => Self::get_all_rook_moves(&virtual_board, piece, moves),
+                PieceType::Knight => Self::get_all_knight_moves(&virtual_board, piece, moves),
+                PieceType::Pawn => Self::get_all_pawn_moves(&virtual_board, piece, moves),
+                PieceType::King => Self::get_all_king_moves(&virtual_board, piece, moves),
             }
 
             // Check if any capture lands on an enemy of the same type
@@ -261,7 +263,7 @@ impl MoveGenerator {
         }
 
         // If this point has been reached,
-        // the king is safe
+        // the square is safe
         false
     }
 }
@@ -282,7 +284,9 @@ mod tests {
 
     fn is_check(fen: &str, color: Color) -> bool {
         let board = Board::initialize_from_fen(fen);
-        MoveGenerator::is_check(&board, color)
+        let king = Piece::new(color, PieceType::King);
+        let mut moves = Vec::new();
+        MoveGenerator::is_check(&board, color, board.pieces[king as usize], &mut moves)
     }
 
     mod check_detection {
