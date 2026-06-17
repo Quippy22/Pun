@@ -220,6 +220,7 @@ impl MoveGenerator {
     /// can reach square B, then piece X on square B can reach square A.
     #[inline(always)]
     fn is_check(board: &Board, color: Color, target_bb: u64, moves: &mut Vec<Move>) -> bool {
+        moves.clear();
         // Iterate over all piece types
         for kind in PieceType::all() {
             // Store the piece and its enemy

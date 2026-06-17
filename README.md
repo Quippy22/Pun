@@ -23,7 +23,7 @@ The project is intentionally built in small steps so each subsystem can be teste
 - [x] Castling
 - [x] En passant
 - [x] Make/unmake move support
-- [ ] Perft testing
+- [x] Perft testing
 - [ ] Search
 - [ ] Evaluation
 - [ ] Checkmate and stalemate detection

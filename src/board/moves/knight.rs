@@ -17,7 +17,7 @@ impl MoveGenerator {
 
         while pieces != 0 {
             index = pieces.trailing_zeros() as u16;
-            knight = 1 << index;
+            knight = 1u64 << index;
 
             // check all the possible moves
             for m in KNIGHT_MOVES.iter() {

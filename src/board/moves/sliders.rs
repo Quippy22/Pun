@@ -64,7 +64,7 @@ impl MoveGenerator {
                 }
 
                 let target_index = current_idx as u16;
-                let target_bit = 1 << target_index;
+                let target_bit = 1u64 << target_index;
 
                 // Own pieces block the ray without generating a move.
                 if (target_bit & own_pieces) != 0 {

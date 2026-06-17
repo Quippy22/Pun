@@ -15,7 +15,7 @@ impl MoveGenerator {
 
         while pieces != 0 {
             index = pieces.trailing_zeros() as u16;
-            pawn = 1 << index;
+            pawn = 1u64 << index;
             is_promotion = index / 8 == 6;
 
             let mut flag = 0b0000;
