@@ -140,6 +140,9 @@ impl MoveGenerator {
 
         let king = Piece::new(color, PieceType::King);
         let mut moves = Vec::new();
+        let mut capture_moves = Vec::new();
+        let mut promotion_moves = Vec::new();
+        let mut quiet_moves = Vec::new();
 
         let mut working = board.clone();
         for mv in &pseudo {
@@ -148,9 +151,19 @@ impl MoveGenerator {
             let legal = !Self::is_check(&working, color, king_bb, &mut moves);
             working.unmake_move();
             if legal {
-                available_moves.push(*mv);
+                if mv.is_capture() {
+                    capture_moves.push(*mv);
+                } else if mv.is_promotion() {
+                    promotion_moves.push(*mv);
+                } else {
+                    quiet_moves.push(*mv);
+                }
             }
         }
+
+        available_moves.extend(capture_moves);
+        available_moves.extend(promotion_moves);
+        available_moves.extend(quiet_moves);
     }
     /// Generates all pseudo-legal moves for a side.
     fn get_all_pseudo_legal_moves(board: &Board, color: Color, available_moves: &mut Vec<Move>) {
