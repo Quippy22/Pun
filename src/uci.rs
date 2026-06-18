@@ -1,19 +1,75 @@
 use std::io::{self, BufRead, Write};
-
-use rand::seq::SliceRandom;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
+    mpsc,
+};
+use std::thread;
+use std::time::Duration;
 
 use crate::board::Board;
-use crate::board::moves::{Move, MoveGenerator};
+use crate::board::moves::Move;
+use crate::search::negmax::negmax;
 
 const STARTPOS_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+const DEFAULT_SEARCH_DEPTH: u32 = 4;
+
+struct SearchJob {
+    stop: Arc<AtomicBool>,
+    result_rx: mpsc::Receiver<Option<(Move, i32)>>,
+}
 
 pub fn uci_loop() {
-    let stdin = io::stdin();
-    let mut board = Board::initialize_from_fen(STARTPOS_FEN);
-    let mut moves: Vec<Move> = vec![];
+    let (command_tx, command_rx) = mpsc::channel::<String>();
 
-    for line in stdin.lock().lines() {
-        let line = line.unwrap();
+    thread::spawn(move || {
+        let stdin = io::stdin();
+        for line in stdin.lock().lines() {
+            match line {
+                Ok(line) => {
+                    if command_tx.send(line).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    let mut board = Board::initialize_from_fen(STARTPOS_FEN);
+    let mut current_search: Option<SearchJob> = None;
+    let mut search_poll = Duration::from_millis(25);
+
+    loop {
+        if let Some(job) = current_search.as_ref() {
+            match job.result_rx.try_recv() {
+                Ok(Some((mv, score))) => {
+                    println!("info string [go] score {} playing {}", score, mv);
+                    println!("bestmove {}", mv.to_uci());
+                    io::stdout().flush().unwrap();
+                    current_search = None;
+                }
+                Ok(None) => {
+                    current_search = None;
+                }
+                Err(mpsc::TryRecvError::Empty) => {}
+                Err(mpsc::TryRecvError::Disconnected) => {
+                    current_search = None;
+                }
+            }
+        }
+
+        let line = match command_rx.recv_timeout(search_poll) {
+            Ok(line) => line,
+            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                if current_search.is_some() {
+                    continue;
+                }
+                break;
+            }
+        };
+
         let tokens: Vec<&str> = line.split_whitespace().collect();
         if tokens.is_empty() {
             continue;
@@ -21,23 +77,25 @@ pub fn uci_loop() {
 
         match tokens[0] {
             "uci" => {
-                println!("info string [uci] handshake received");
                 println!("id name Pun");
                 println!("id author Quippy");
                 println!("uciok");
                 io::stdout().flush().unwrap();
             }
-
             "isready" => {
-                println!("info string [isready] engine is ready");
                 println!("readyok");
                 io::stdout().flush().unwrap();
             }
-
+            "setoption" => {}
+            "ucinewgame" => {
+                board = Board::initialize_from_fen(STARTPOS_FEN);
+            }
             "position" => {
+                if let Some(job) = current_search.as_ref() {
+                    job.stop.store(true, Ordering::Relaxed);
+                }
+
                 if tokens.len() < 2 {
-                    println!("info string [position] no arguments given, ignoring");
-                    io::stdout().flush().unwrap();
                     continue;
                 }
 
@@ -45,68 +103,60 @@ pub fn uci_loop() {
 
                 match tokens[1] {
                     "startpos" => {
-                        println!("info string [position] startpos received, resetting board");
                         board = Board::initialize_from_fen(STARTPOS_FEN);
                     }
                     "fen" => {
                         let fen_end = moves_idx.unwrap_or(tokens.len());
                         let fen = tokens[2..fen_end].join(" ");
-                        println!("info string [position] fen received: {}", fen);
                         board = Board::initialize_from_fen(&fen);
                     }
-                    other => {
-                        println!("info string [position] unknown subcommand: {}", other);
-                        io::stdout().flush().unwrap();
-                        continue;
-                    }
+                    _ => continue,
                 }
 
                 if let Some(idx) = moves_idx {
-                    let move_list = &tokens[idx + 1..];
-                    println!(
-                        "info string [position] applying {} move(s): {}",
-                        move_list.len(),
-                        move_list.join(", ")
-                    );
-                    for mv in move_list {
+                    for mv in &tokens[idx + 1..] {
                         board.make_move(&Move::from_uci(mv));
                     }
-                } else {
-                    println!("info string [position] no moves to apply");
                 }
-
-                io::stdout().flush().unwrap();
             }
-
             "go" => {
-                // Find all the possible moves for the current board
-                MoveGenerator::get_all_moves(&board, board.side_to_move, &mut moves);
-                moves.shuffle(&mut rand::rng());
-
-                if !moves.is_empty() {
-                    println!("info string [go] playing {}", moves[0]);
-                    println!("bestmove {}", moves[0].to_uci());
-                    // board.make_move(&moves[0]);
-                } else {
-                    println!("info string [go] no moves found, sending null move");
-                    println!("bestmove 0000");
+                if let Some(job) = current_search.take() {
+                    job.stop.store(true, Ordering::Relaxed);
                 }
-                io::stdout().flush().unwrap();
 
-                // clear the moves vector
-                moves.clear();
+                let depth = tokens
+                    .iter()
+                    .position(|&t| t == "depth")
+                    .and_then(|idx| tokens.get(idx + 1))
+                    .and_then(|value| value.parse::<u32>().ok())
+                    .unwrap_or(DEFAULT_SEARCH_DEPTH);
+
+                let stop = Arc::new(AtomicBool::new(false));
+                let thread_stop = Arc::clone(&stop);
+                let mut search_board = board.clone();
+                let (result_tx, result_rx) = mpsc::channel();
+
+                thread::spawn(move || {
+                    let result = negmax(&mut search_board, depth, thread_stop);
+                    let _ = result_tx.send(result);
+                });
+
+                current_search = Some(SearchJob { stop, result_rx });
             }
-
+            "stop" => {
+                if let Some(job) = current_search.as_ref() {
+                    job.stop.store(true, Ordering::Relaxed);
+                }
+            }
             "quit" => {
-                println!("info string [quit] shutting down");
-                io::stdout().flush().unwrap();
+                if let Some(job) = current_search.as_ref() {
+                    job.stop.store(true, Ordering::Relaxed);
+                }
                 break;
             }
-
-            other => {
-                println!("info string [unknown] unrecognized command: {}", other);
-                io::stdout().flush().unwrap();
-            }
+            _ => {}
         }
+
+        search_poll = Duration::from_millis(25);
     }
 }
