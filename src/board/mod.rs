@@ -177,8 +177,8 @@ pub struct Board {
     pub half_move_clock: u16,
     /// Full move number.
     pub full_move_clock: u16,
-    /// Saved state for unmake_move.
-    undo: Option<UndoInfo>,
+    /// Saved states for unmake_move.
+    undo: Vec<UndoInfo>,
 }
 
 #[derive(Debug, Clone)]
@@ -218,7 +218,7 @@ impl Board {
             en_passant_sq: fen_data.en_passant_sq,
             half_move_clock: fen_data.half_move,
             full_move_clock: fen_data.full_move,
-            undo: None,
+            undo: Vec::new(),
         }
     }
 
@@ -274,7 +274,7 @@ impl Board {
         let target_piece = self.piece_at(to_sq);
 
         // Save undo info before any state changes
-        self.undo = Some(UndoInfo {
+        self.undo.push(UndoInfo {
             castling_rights: self.castling_rights,
             en_passant_sq: self.en_passant_sq,
             half_move_clock: self.half_move_clock,
@@ -326,7 +326,7 @@ impl Board {
         }
 
         // Update undo info with capture details
-        if let Some(ref mut undo) = self.undo {
+        if let Some(undo) = self.undo.last_mut() {
             undo.captured_piece = captured_piece;
             undo.captured_sq = captured_sq;
         }
@@ -433,7 +433,7 @@ impl Board {
 
     /// Reverses the last make_move.
     pub fn unmake_move(&mut self) {
-        let undo = self.undo.take().expect("No move to unmake");
+        let undo = self.undo.pop().expect("No move to unmake");
 
         let from_sq = undo.mv.start_pos() as u8;
         let to_sq = undo.mv.end_pos() as u8;
