@@ -1,3 +1,4 @@
+mod attacks;
 pub(crate) mod king;
 pub(crate) mod knight;
 pub(crate) mod pawn;
@@ -134,22 +135,20 @@ pub struct MoveGenerator;
 
 impl MoveGenerator {
     /// Filters out the illegal moves
-    pub fn get_all_moves(board: &Board, color: Color, available_moves: &mut Vec<Move>) {
+    pub fn get_all_moves(board: &mut Board, color: Color, available_moves: &mut Vec<Move>) {
         let mut pseudo = Vec::new();
         Self::get_all_pseudo_legal_moves(board, color, &mut pseudo);
 
         let king = Piece::new(color, PieceType::King);
-        let mut moves = Vec::new();
         let mut capture_moves = Vec::new();
         let mut promotion_moves = Vec::new();
         let mut quiet_moves = Vec::new();
 
-        let mut working = board.clone();
         for mv in &pseudo {
-            working.make_move(mv);
-            let king_bb = working.pieces[king as usize];
-            let legal = !Self::is_check(&working, color, king_bb, &mut moves);
-            working.unmake_move();
+            board.make_move(mv);
+            let king_bb = board.pieces[king as usize];
+            let legal = !Self::is_check(board, color, king_bb);
+            board.unmake_move();
             if legal {
                 if mv.is_capture() {
                     capture_moves.push(*mv);
@@ -165,6 +164,7 @@ impl MoveGenerator {
         available_moves.extend(promotion_moves);
         available_moves.extend(quiet_moves);
     }
+
     /// Generates all pseudo-legal moves for a side.
     fn get_all_pseudo_legal_moves(board: &Board, color: Color, available_moves: &mut Vec<Move>) {
         for kind in PieceType::all() {
@@ -217,69 +217,6 @@ impl MoveGenerator {
 
         (own_bitboard, enemy_bitboard)
     }
-
-    /// Checks if the given square (represented as a single-bit bitboard) is attacked.
-    ///
-    /// Uses the "reverse attack" technique: instead of generating all enemy moves
-    /// and checking if any land on the target, we place a virtual piece of each type
-    /// on the target square and generate its captures.
-    ///
-    /// For each piece type (queen, bishop, rook, knight, pawn, king):
-    ///   - Place a virtual piece of that type on the target square
-    ///   - Generate its moves
-    ///   - If any capture lands on an enemy of the same type → square is attacked
-    ///
-    /// This works because attack rays are symmetric: if piece X on square A
-    /// can reach square B, then piece X on square B can reach square A.
-    #[inline(always)]
-    fn is_check(board: &Board, color: Color, target_bb: u64, moves: &mut Vec<Move>) -> bool {
-        moves.clear();
-        // Iterate over all piece types
-        for kind in PieceType::all() {
-            // Store the piece and its enemy
-            let piece = Piece::new(color, kind);
-            let enemy = piece.opposite();
-
-            // Build virtual board: put target as virtual piece, clear original
-            let mut virtual_board = board.clone();
-            // Preserve original piece bits as obstacles in the pawn bitboard
-            let pawn = Piece::new(color, PieceType::Pawn);
-            let original_piece_bb = virtual_board.pieces[piece as usize];
-            virtual_board.pieces[pawn as usize] |= original_piece_bb;
-            virtual_board.pieces[piece as usize] = target_bb;
-            if kind != PieceType::King {
-                let king = Piece::new(color, PieceType::King);
-                virtual_board.pieces[king as usize] = 0;
-            }
-            virtual_board.castling_rights = 0;
-            virtual_board.refresh_colors();
-
-            // Dispatch generator for this piece type
-            match kind {
-                PieceType::Queen => Self::get_all_queen_moves(&virtual_board, piece, moves),
-                PieceType::Bishop => Self::get_all_bishop_moves(&virtual_board, piece, moves),
-                PieceType::Rook => Self::get_all_rook_moves(&virtual_board, piece, moves),
-                PieceType::Knight => Self::get_all_knight_moves(&virtual_board, piece, moves),
-                PieceType::Pawn => Self::get_all_pawn_moves(&virtual_board, piece, moves),
-                PieceType::King => Self::get_all_king_moves(&virtual_board, piece, moves),
-            }
-
-            // Check if any capture lands on an enemy of the same type
-            if moves
-                .iter()
-                .any(|mv| mv.is_capture() && board.piece_at(mv.end_pos() as u8) == Some(enemy))
-            {
-                return true;
-            }
-
-            // Clear the moves list for the next iteration
-            moves.clear();
-        }
-
-        // If this point has been reached,
-        // the square is safe
-        false
-    }
 }
 
 #[cfg(test)]
@@ -288,19 +225,35 @@ mod tests {
     use crate::board::{Board, Color};
 
     fn legal_moves(fen: &str, color: Color) -> Vec<String> {
-        let board = Board::initialize_from_fen(fen);
+        let mut board = Board::initialize_from_fen(fen);
         let mut moves = Vec::new();
-        MoveGenerator::get_all_moves(&board, color, &mut moves);
+        MoveGenerator::get_all_moves(&mut board, color, &mut moves);
         let mut uci: Vec<String> = moves.iter().map(|m| m.to_uci()).collect();
         uci.sort();
         uci
     }
 
+    #[test]
+    fn get_all_moves_keeps_board_state_intact() {
+        let mut board =
+            Board::initialize_from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+        let before = board.clone();
+        let mut moves = Vec::new();
+        MoveGenerator::get_all_moves(&mut board, Color::White, &mut moves);
+
+        assert_eq!(board.pieces, before.pieces);
+        assert_eq!(board.colors, before.colors);
+        assert_eq!(board.side_to_move, before.side_to_move);
+        assert_eq!(board.castling_rights, before.castling_rights);
+        assert_eq!(board.en_passant_sq, before.en_passant_sq);
+        assert_eq!(board.half_move_clock, before.half_move_clock);
+        assert_eq!(board.full_move_clock, before.full_move_clock);
+    }
+
     fn is_check(fen: &str, color: Color) -> bool {
         let board = Board::initialize_from_fen(fen);
         let king = Piece::new(color, PieceType::King);
-        let mut moves = Vec::new();
-        MoveGenerator::is_check(&board, color, board.pieces[king as usize], &mut moves)
+        MoveGenerator::is_check(&board, color, board.pieces[king as usize])
     }
 
     mod check_detection {

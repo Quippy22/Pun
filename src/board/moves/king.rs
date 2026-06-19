@@ -63,8 +63,7 @@ impl MoveGenerator {
 
         if king_real_sq % 8 == 4 && king_real_sq / 8 == home_rank && board.castling_rights != 0 {
             // King must not be in check to castle
-            let mut moves = Vec::new();
-            if !Self::is_check(board, color, king_bb, &mut moves) {
+            if !Self::is_check(board, color, king_bb) {
                 let (ks_bit, qs_bit) = match color {
                     Color::White => (Board::WHITE_KINGSIDE, Board::WHITE_QUEENSIDE),
                     Color::Black => (Board::BLACK_KINGSIDE, Board::BLACK_QUEENSIDE),
@@ -87,7 +86,7 @@ impl MoveGenerator {
                                 king_bb.wrapping_shr(shift.unsigned_abs() as u32)
                             };
                             if sq_bb & (own_pieces | enemy_pieces) != 0
-                                || Self::is_check(board, color, sq_bb_real, &mut moves)
+                                || Self::is_check(board, color, sq_bb_real)
                             {
                                 safe = false;
                                 break;
@@ -119,7 +118,7 @@ impl MoveGenerator {
                                 king_bb.wrapping_shr(shift.unsigned_abs() as u32)
                             };
                             if sq_bb & (own_pieces | enemy_pieces) != 0
-                                || Self::is_check(board, color, sq_bb_real, &mut moves)
+                                || Self::is_check(board, color, sq_bb_real)
                             {
                                 safe = false;
                                 break;
