@@ -8,7 +8,9 @@ pub fn perft(board: &Board, depth: u32) -> u64 {
     }
 
     let mut moves = Vec::new();
-    MoveGenerator::get_all_moves(board, board.side_to_move, &mut moves);
+    let mut working = board.clone();
+    let color = working.side_to_move;
+    MoveGenerator::get_all_moves(&mut working, color, &mut moves);
 
     let mut nodes = 0u64;
     for mv in &moves {
@@ -22,7 +24,9 @@ pub fn perft(board: &Board, depth: u32) -> u64 {
 
 pub fn divide(board: &Board, depth: u32) -> u64 {
     let mut moves = Vec::new();
-    MoveGenerator::get_all_moves(board, board.side_to_move, &mut moves);
+    let mut working = board.clone();
+    let color = working.side_to_move;
+    MoveGenerator::get_all_moves(&mut working, color, &mut moves);
 
     let mut total = 0u64;
     for mv in &moves {
@@ -38,7 +42,9 @@ pub fn divide(board: &Board, depth: u32) -> u64 {
 
 pub fn divide_map(board: &Board, depth: u32) -> HashMap<String, u64> {
     let mut moves = Vec::new();
-    MoveGenerator::get_all_moves(board, board.side_to_move, &mut moves);
+    let mut working = board.clone();
+    let color = working.side_to_move;
+    MoveGenerator::get_all_moves(&mut working, color, &mut moves);
 
     let mut result = HashMap::new();
     for mv in &moves {
