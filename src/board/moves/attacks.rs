@@ -2,7 +2,7 @@ use super::*;
 
 impl MoveGenerator {
     #[inline(always)]
-    pub(super) fn is_check(board: &Board, color: Color, target_bb: u64) -> bool {
+    pub fn is_check(board: &Board, color: Color, target_bb: u64) -> bool {
         let square = target_bb.trailing_zeros() as usize;
         Self::is_square_attacked(board, square, color.opposite())
     }

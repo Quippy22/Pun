@@ -1,4 +1,4 @@
-use crate::board::Board;
+use crate::board::{Board, Piece, PieceType};
 use crate::board::moves::{Move, MoveGenerator};
 
 use super::eval::evaluate;
@@ -8,6 +8,7 @@ use std::sync::{
 };
 
 const INF: i32 = 1_000_000;
+const MATE_VALUE: i32 = 100_000;
 
 /// Searches for the best move using negamax with alpha-beta pruning.
 pub fn negmax(board: &mut Board, depth: u32, stop: Arc<AtomicBool>) -> Option<(Move, i32)> {
@@ -65,7 +66,12 @@ fn negamax_score(
     MoveGenerator::get_all_moves(board, board.side_to_move, &mut moves);
 
     if moves.is_empty() {
-        return Some(evaluate(board));
+        let king_sq = board.pieces[Piece::new(board.side_to_move, PieceType::King) as usize];
+        if MoveGenerator::is_check(board, board.side_to_move, king_sq) {
+            return Some(-MATE_VALUE);
+        } else {
+            return Some(0); // Stalemate
+        }
     }
 
     let mut best_score = -INF;
