@@ -160,6 +160,8 @@ impl Piece {
 pub struct Board {
     /// One bitboard per piece type.
     pub pieces: [u64; 12],
+    /// Mailbox for O(1) piece lookup.
+    pub mailbox: [Option<Piece>; 64],
     /// One occupancy bitboard per color.
     pub colors: [u64; 2],
     /// Side to move.
@@ -210,8 +212,9 @@ impl Board {
         let white_bitboard = Self::get_color_bitboard(&fen_data.pieces, Color::White);
         let black_bitboard = Self::get_color_bitboard(&fen_data.pieces, Color::Black);
 
-        Self {
+        let mut board = Self {
             pieces: fen_data.pieces,
+            mailbox: [None; 64],
             colors: [white_bitboard, black_bitboard],
             side_to_move: fen_data.side_to_move,
             castling_rights: fen_data.castling_rights,
@@ -219,7 +222,18 @@ impl Board {
             half_move_clock: fen_data.half_move,
             full_move_clock: fen_data.full_move,
             undo: Vec::new(),
+        };
+
+        for piece in Piece::all() {
+            let mut bb = board.pieces[piece as usize];
+            while bb != 0 {
+                let sq = bb.trailing_zeros() as usize;
+                board.mailbox[sq] = Some(piece);
+                bb &= bb - 1;
+            }
         }
+
+        board
     }
 
     /// ORs together all piece bitboards for a given color.
@@ -496,26 +510,23 @@ impl Board {
 
     /// Returns the piece sitting on a square, if any.
     fn piece_at(&self, square: u8) -> Option<Piece> {
-        let mask = 1u64 << square;
-        Piece::all().find(|piece| self.pieces[*piece as usize] & mask != 0)
+        self.mailbox[square as usize]
     }
 
     /// Removes and returns the piece on a square.
     fn remove_piece_at(&mut self, square: u8) -> Option<Piece> {
-        let mask = 1u64 << square;
-        for piece in Piece::all() {
-            let bb = &mut self.pieces[piece as usize];
-            if (*bb & mask) != 0 {
-                *bb &= !mask;
-                return Some(piece);
-            }
+        let piece = self.mailbox[square as usize];
+        if let Some(p) = piece {
+            self.pieces[p as usize] &= !(1u64 << square);
+            self.mailbox[square as usize] = None;
         }
-        None
+        piece
     }
 
     /// Places a piece on a square without clearing anything first.
     fn place_piece_at(&mut self, piece: Piece, square: u8) {
         self.pieces[piece as usize] |= 1u64 << square;
+        self.mailbox[square as usize] = Some(piece);
     }
 
     /// Clears castling rights when a rook leaves or is captured on a home square.
