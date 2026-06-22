@@ -24,9 +24,9 @@ The project is intentionally built in small steps so each subsystem can be teste
 - [x] En passant
 - [x] Make/unmake move support
 - [x] Perft testing
-- [ ] Search
-- [ ] Evaluation
-- [ ] Checkmate and stalemate detection
+- [x] Search
+- [x] Evaluation
+- [x] Checkmate and stalemate detection
 - [ ] Time management
 
 

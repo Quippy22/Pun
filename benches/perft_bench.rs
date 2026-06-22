@@ -1,11 +1,12 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, black_box, criterion_group, criterion_main};
 use pun::board::Board;
 use pun::perft::perft;
 use std::time::Duration;
 
 fn bench_perft(c: &mut Criterion) {
-    let board = Board::initialize_from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-    
+    let board =
+        Board::initialize_from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+
     // Low depth: fast feedback
     let mut low_depth_group = c.benchmark_group("perft_low_depth");
     for depth in 1..=4 {
@@ -28,7 +29,7 @@ fn bench_perft(c: &mut Criterion) {
     high_depth_group.bench_with_input("depth_6", &6, |b, &d| {
         b.iter(|| black_box(perft(&board, d)));
     });
-    
+
     high_depth_group.finish();
 }
 

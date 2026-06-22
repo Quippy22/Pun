@@ -1,5 +1,5 @@
-use crate::board::{Board, Piece, PieceType};
 use crate::board::moves::{Move, MoveGenerator};
+use crate::board::{Board, Piece, PieceType};
 
 use super::eval::evaluate;
 use std::sync::{

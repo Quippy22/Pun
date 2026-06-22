@@ -1,6 +1,7 @@
 mod attacks;
 pub(crate) mod king;
 pub(crate) mod knight;
+pub(crate) mod openings;
 pub(crate) mod pawn;
 pub(crate) mod sliders;
 
