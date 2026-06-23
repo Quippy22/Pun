@@ -36,7 +36,7 @@ use crate::utils::string_to_square;
 /// Castles:
 /// 0100 - king side
 /// 0110 - queen side
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct Move(pub u16);
 
 impl Move {
@@ -136,6 +136,7 @@ pub struct MoveGenerator;
 
 impl MoveGenerator {
     /// Filters out the illegal moves
+    /// Sorts the moves captures -> promotions -> quiets
     pub fn get_all_moves(board: &mut Board, color: Color, available_moves: &mut Vec<Move>) {
         let mut pseudo = Vec::new();
         Self::get_all_pseudo_legal_moves(board, color, &mut pseudo);

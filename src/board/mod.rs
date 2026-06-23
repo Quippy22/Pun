@@ -181,6 +181,8 @@ pub struct Board {
     pub full_move_clock: u16,
     /// Saved states for unmake_move.
     undo: Vec<UndoInfo>,
+    /// Unique Zobrist hash of the current board state.
+    pub zobrist_hash: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -222,6 +224,7 @@ impl Board {
             half_move_clock: fen_data.half_move,
             full_move_clock: fen_data.full_move,
             undo: Vec::new(),
+            zobrist_hash: 0,
         };
 
         for piece in Piece::all() {
@@ -232,8 +235,35 @@ impl Board {
                 bb &= bb - 1;
             }
         }
+        board.zobrist_hash = board.compute_hash();
 
         board
+    }
+
+    /// Computes the initial Zobrist hash of the board state.
+    pub fn compute_hash(&self) -> u64 {
+        use crate::search::transposition_table::KEYS;
+        let mut hash = 0u64;
+
+        for (sq, piece) in self.mailbox.iter().enumerate() {
+            if let Some(p) = piece {
+                hash ^= KEYS.pieces[*p as usize][sq];
+            }
+        }
+
+        if self.side_to_move == Color::Black {
+            hash ^= KEYS.side_to_move;
+        }
+
+        hash ^= KEYS.castling[self.castling_rights as usize];
+
+        if let Some(sq) = self.en_passant_sq {
+            hash ^= KEYS.ep_file[(sq % 8) as usize];
+        } else {
+            hash ^= KEYS.ep_file[8];
+        }
+
+        hash
     }
 
     /// ORs together all piece bitboards for a given color.
@@ -276,9 +306,24 @@ impl Board {
     /// - en passant target updates
     /// - halfmove/fullmove clocks
     pub fn make_move(&mut self, mv: &Move) {
+        use crate::search::transposition_table::KEYS;
+
         // 1. Extract move data
         let from_sq = mv.start_pos() as u8;
         let to_sq = mv.end_pos() as u8;
+
+        // Update side-to-move key
+        self.zobrist_hash ^= KEYS.side_to_move;
+
+        // Update castling rights key
+        self.zobrist_hash ^= KEYS.castling[self.castling_rights as usize];
+
+        // Update EP file key
+        if let Some(sq) = self.en_passant_sq {
+            self.zobrist_hash ^= KEYS.ep_file[(sq % 8) as usize];
+        } else {
+            self.zobrist_hash ^= KEYS.ep_file[8];
+        }
 
         // 1.1 Get the moving piece and the target piece
         let moving_color = self.side_to_move;
@@ -318,8 +363,9 @@ impl Board {
         };
 
         // Remove the captured piece
-        if target_piece.is_some() {
+        if let Some(p) = target_piece {
             self.remove_piece_at(to_sq);
+            self.zobrist_hash ^= KEYS.pieces[p as usize][to_sq as usize];
         }
 
         if is_pawn
@@ -336,6 +382,8 @@ impl Board {
                     .expect("black en passant capture square overflow"),
             };
             captured_piece = self.remove_piece_at(ep_capture_sq);
+            self.zobrist_hash ^=
+                KEYS.pieces[captured_piece.unwrap() as usize][ep_capture_sq as usize];
             captured_sq = Some(ep_capture_sq);
         }
 
@@ -345,8 +393,9 @@ impl Board {
             undo.captured_sq = captured_sq;
         }
 
-        // Remove the moving piece before any special re-placement.
+        // Remove the moving piece
         self.remove_piece_at(from_sq);
+        self.zobrist_hash ^= KEYS.pieces[moving_piece as usize][from_sq as usize];
 
         // A double pawn push exposes the skipped square as a new en passant target.
         if is_pawn {
@@ -388,19 +437,27 @@ impl Board {
         match (moving_piece, from_sq, to_sq) {
             (Piece::WhiteKing, 4, 6) => {
                 self.remove_piece_at(7);
+                self.zobrist_hash ^= KEYS.pieces[Piece::WhiteRook as usize][7];
                 self.place_piece_at(Piece::WhiteRook, 5);
+                self.zobrist_hash ^= KEYS.pieces[Piece::WhiteRook as usize][5];
             }
             (Piece::WhiteKing, 4, 2) => {
                 self.remove_piece_at(0);
+                self.zobrist_hash ^= KEYS.pieces[Piece::WhiteRook as usize][0];
                 self.place_piece_at(Piece::WhiteRook, 3);
+                self.zobrist_hash ^= KEYS.pieces[Piece::WhiteRook as usize][3];
             }
             (Piece::BlackKing, 60, 62) => {
                 self.remove_piece_at(63);
+                self.zobrist_hash ^= KEYS.pieces[Piece::BlackRook as usize][63];
                 self.place_piece_at(Piece::BlackRook, 61);
+                self.zobrist_hash ^= KEYS.pieces[Piece::BlackRook as usize][61];
             }
             (Piece::BlackKing, 60, 58) => {
                 self.remove_piece_at(56);
+                self.zobrist_hash ^= KEYS.pieces[Piece::BlackRook as usize][56];
                 self.place_piece_at(Piece::BlackRook, 59);
+                self.zobrist_hash ^= KEYS.pieces[Piece::BlackRook as usize][59];
             }
             _ => {}
         }
@@ -420,6 +477,15 @@ impl Board {
             moving_piece
         };
         self.place_piece_at(piece_to_place, to_sq);
+        self.zobrist_hash ^= KEYS.pieces[piece_to_place as usize][to_sq as usize];
+
+        // 5. Finalize Hash state changes
+        self.zobrist_hash ^= KEYS.castling[self.castling_rights as usize];
+        if let Some(sq) = self.en_passant_sq {
+            self.zobrist_hash ^= KEYS.ep_file[(sq % 8) as usize];
+        } else {
+            self.zobrist_hash ^= KEYS.ep_file[8];
+        }
 
         // 5. Refresh the board state
         // Pawn moves and captures reset the halfmove clock.
@@ -447,13 +513,23 @@ impl Board {
 
     /// Reverses the last make_move.
     pub fn unmake_move(&mut self) {
+        use crate::search::transposition_table::KEYS;
         let undo = self.undo.pop().expect("No move to unmake");
+
+        // 1. Revert Hash State Changes
+        self.zobrist_hash ^= KEYS.castling[self.castling_rights as usize];
+        if let Some(sq) = self.en_passant_sq {
+            self.zobrist_hash ^= KEYS.ep_file[(sq % 8) as usize];
+        } else {
+            self.zobrist_hash ^= KEYS.ep_file[8];
+        }
 
         let from_sq = undo.mv.start_pos() as u8;
         let to_sq = undo.mv.end_pos() as u8;
 
         // Remove the piece from its destination
-        self.remove_piece_at(to_sq);
+        let piece_at_to = self.remove_piece_at(to_sq);
+        self.zobrist_hash ^= KEYS.pieces[piece_at_to.unwrap() as usize][to_sq as usize];
 
         // Place the moving piece back at its origin
         // If it was a promotion, place the pawn back instead
@@ -463,29 +539,39 @@ impl Board {
             undo.moving_piece
         };
         self.place_piece_at(piece_to_restore, from_sq);
+        self.zobrist_hash ^= KEYS.pieces[piece_to_restore as usize][from_sq as usize];
 
         // Restore captured piece
         if let (Some(piece), Some(sq)) = (undo.captured_piece, undo.captured_sq) {
             self.place_piece_at(piece, sq);
+            self.zobrist_hash ^= KEYS.pieces[piece as usize][sq as usize];
         }
 
         // Reverse castling rook movement
         match (undo.moving_piece, from_sq, to_sq) {
             (Piece::WhiteKing, 4, 6) => {
                 self.remove_piece_at(5);
+                self.zobrist_hash ^= KEYS.pieces[Piece::WhiteRook as usize][5];
                 self.place_piece_at(Piece::WhiteRook, 7);
+                self.zobrist_hash ^= KEYS.pieces[Piece::WhiteRook as usize][7];
             }
             (Piece::WhiteKing, 4, 2) => {
                 self.remove_piece_at(3);
+                self.zobrist_hash ^= KEYS.pieces[Piece::WhiteRook as usize][3];
                 self.place_piece_at(Piece::WhiteRook, 0);
+                self.zobrist_hash ^= KEYS.pieces[Piece::WhiteRook as usize][0];
             }
             (Piece::BlackKing, 60, 62) => {
                 self.remove_piece_at(61);
+                self.zobrist_hash ^= KEYS.pieces[Piece::BlackRook as usize][61];
                 self.place_piece_at(Piece::BlackRook, 63);
+                self.zobrist_hash ^= KEYS.pieces[Piece::BlackRook as usize][63];
             }
             (Piece::BlackKing, 60, 58) => {
                 self.remove_piece_at(59);
+                self.zobrist_hash ^= KEYS.pieces[Piece::BlackRook as usize][59];
                 self.place_piece_at(Piece::BlackRook, 56);
+                self.zobrist_hash ^= KEYS.pieces[Piece::BlackRook as usize][56];
             }
             _ => {}
         }
@@ -496,6 +582,15 @@ impl Board {
         self.half_move_clock = undo.half_move_clock;
         self.full_move_clock = undo.full_move_clock;
         self.side_to_move = undo.side_to_move;
+
+        // Re-apply restored features to hash
+        self.zobrist_hash ^= KEYS.side_to_move;
+        self.zobrist_hash ^= KEYS.castling[self.castling_rights as usize];
+        if let Some(sq) = self.en_passant_sq {
+            self.zobrist_hash ^= KEYS.ep_file[(sq % 8) as usize];
+        } else {
+            self.zobrist_hash ^= KEYS.ep_file[8];
+        }
 
         self.refresh_colors();
     }
@@ -538,5 +633,51 @@ impl Board {
             63 => !Self::BLACK_KINGSIDE,
             _ => 0b1111,
         };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::board::moves::Move;
+
+    mod zobrist_hashing {
+        use super::*;
+
+        #[test]
+        fn test_initialization() {
+            let board = Board::initialize_from_fen(
+                "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            );
+            assert_eq!(board.zobrist_hash, board.compute_hash());
+        }
+
+        #[test]
+        fn test_incremental_updates() {
+            let mut board = Board::initialize_from_fen(
+                "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            );
+            let initial_hash = board.zobrist_hash;
+
+            let mv = Move::from_uci("e2e4");
+            board.make_move(&mv);
+            assert_ne!(initial_hash, board.zobrist_hash);
+            assert_eq!(board.zobrist_hash, board.compute_hash());
+
+            board.unmake_move();
+            assert_eq!(initial_hash, board.zobrist_hash);
+            assert_eq!(board.zobrist_hash, board.compute_hash());
+        }
+
+        #[test]
+        fn test_different_positions_different_hashes() {
+            let board1 = Board::initialize_from_fen(
+                "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            );
+            let board2 = Board::initialize_from_fen(
+                "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1",
+            );
+            assert_ne!(board1.zobrist_hash, board2.zobrist_hash);
+        }
     }
 }

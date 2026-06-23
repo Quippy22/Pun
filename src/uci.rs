@@ -10,17 +10,21 @@ use std::time::Duration;
 use crate::board::moves::Move;
 use crate::board::{Board, Color};
 use crate::search::negmax::negmax;
+use crate::search::transposition_table::TranspositionTable;
 
 const STARTPOS_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 const DEFAULT_SEARCH_DEPTH: u32 = 4;
+const TT_SIZE_MB: usize = 64;
 
 struct SearchJob {
     stop: Arc<AtomicBool>,
     result_rx: mpsc::Receiver<Option<(Move, i32)>>,
 }
-
 pub fn uci_loop() {
     let (command_tx, command_rx) = mpsc::channel::<String>();
+
+    // Initialize Transposition Table and wrap in Arc for thread-safe sharing
+    let tt = Arc::new(TranspositionTable::new(TT_SIZE_MB));
 
     thread::spawn(move || {
         let stdin = io::stdin();
@@ -44,6 +48,21 @@ pub fn uci_loop() {
     let mut moves_played: Vec<String> = Vec::new();
 
     loop {
+        // ... (rest of uci_loop remains same)
+        // Inside uci_loop loop, where go command is handled:
+
+        // ...
+        // In "go" branch:
+        // let thread_stop = Arc::clone(&stop);
+        // let tt_clone = Arc::clone(&tt);
+        // let mut search_board = board.clone();
+        // let (result_tx, result_rx) = mpsc::channel();
+        // thread::spawn(move || {
+        //     let result = negmax(&mut search_board, &tt_clone, depth, thread_stop);
+        //     let _ = result_tx.send(result);
+        // });
+        // ...
+
         if let Some(job) = current_search.as_ref() {
             match job.result_rx.try_recv() {
                 Ok(Some((mv, score))) => {
@@ -151,11 +170,12 @@ pub fn uci_loop() {
 
                 let stop = Arc::new(AtomicBool::new(false));
                 let thread_stop = Arc::clone(&stop);
+                let tt_clone = Arc::clone(&tt);
                 let mut search_board = board.clone();
                 let (result_tx, result_rx) = mpsc::channel();
 
                 thread::spawn(move || {
-                    let result = negmax(&mut search_board, depth, thread_stop);
+                    let result = negmax(&mut search_board, &tt_clone, depth, thread_stop);
                     let _ = result_tx.send(result);
                 });
 
