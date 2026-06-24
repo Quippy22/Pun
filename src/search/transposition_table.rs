@@ -1,5 +1,8 @@
 use crate::board::moves::Move;
-use std::sync::Mutex;
+use std::sync::RwLock;
+
+const NUM_SHARDS: usize = 2048;
+const SHARD_MASK: usize = NUM_SHARDS - 1;
 
 /// Transposition table entry.
 /// The key is a hash of the board state.
@@ -15,44 +18,40 @@ pub struct TTEntry {
     pub best_move: Move,
 }
 
-/// A fixed-size hash table used to store previously evaluated board positions.
+/// A sharded, fixed-size hash table used to store previously evaluated board positions.
 ///
-/// The table uses a contiguous `Vec` for cache-friendly access, wrapped in a
-/// `Mutex` for safe shared access across threads during search.
-///
-/// # Indexing Logic
-/// The indexing uses the modulo operator (`hash % size`) to map the large
-/// (64-bit) Zobrist hash space into the finite, valid index range of the
-/// array (0 to `size - 1`). This provides an extremely fast mapping
-/// operation essential for performance in search.
-///
-/// # Collision Policy
-/// This implementation uses a "replace" policy where new entries overwrite old ones
-/// at the same index in the event of a collision.
+/// The table uses sharding to reduce lock contention during multi-threaded search,
+/// and uses bitwise operations for fast indexing.
 pub struct TranspositionTable {
-    table: Mutex<Vec<TTEntry>>,
-    size: usize,
+    shards: Vec<RwLock<Vec<TTEntry>>>,
+    entry_mask: usize,
 }
 
 impl TranspositionTable {
     pub fn new(size_in_mb: usize) -> Self {
-        // Calculate number of entries: (Size in bytes) / (Size of TTEntry in bytes)
-        let num_entries = (size_in_mb * 1024 * 1024) / std::mem::size_of::<TTEntry>();
+        let total_entries = (size_in_mb * 1024 * 1024) / std::mem::size_of::<TTEntry>();
+        // Ensure total_entries is a power of 2 and divisible by NUM_SHARDS
+        let num_entries = total_entries.next_power_of_two();
+        let num_entries_per_shard = num_entries / NUM_SHARDS;
 
-        // Initialize with default entries (key will be 0, indicating empty)
-        let table = Mutex::new(vec![TTEntry::default(); num_entries]);
+        let mut shards = Vec::with_capacity(NUM_SHARDS);
+        for _ in 0..NUM_SHARDS {
+            shards.push(RwLock::new(vec![TTEntry::default(); num_entries_per_shard]));
+        }
 
         Self {
-            table,
-            size: num_entries,
+            shards,
+            entry_mask: num_entries_per_shard - 1,
         }
     }
 
     // Get an entry based on the current board hash
     pub fn get(&self, hash: u64) -> Option<TTEntry> {
-        let index = (hash as usize) % self.size;
-        let table = self.table.lock().unwrap();
-        let entry = table[index];
+        let shard_index = (hash as usize) & SHARD_MASK;
+        let entry_index = (hash as usize >> 11) & self.entry_mask;
+
+        let table = self.shards[shard_index].read().unwrap();
+        let entry = table[entry_index];
 
         // Check if the key matches (verifies it's not a collision)
         if entry.key == hash && entry.depth != 0 {
@@ -64,9 +63,11 @@ impl TranspositionTable {
 
     // Store an entry
     pub fn put(&self, entry: TTEntry) {
-        let index = (entry.key as usize) % self.size;
-        let mut table = self.table.lock().unwrap();
-        table[index] = entry;
+        let shard_index = (entry.key as usize) & SHARD_MASK;
+        let entry_index = (entry.key as usize >> 11) & self.entry_mask;
+
+        let mut table = self.shards[shard_index].write().unwrap();
+        table[entry_index] = entry;
     }
 }
 
